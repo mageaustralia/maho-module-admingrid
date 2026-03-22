@@ -65,7 +65,7 @@
             </mageaustralia_admingrid_setup>
         </resources>
         <events>
-            <admingrid_prepare_columns_after>
+            <adminhtml_block_widget_grid_prepare_columns_after>
                 <observers>
                     <mageaustralia_admingrid>
                         <type>singleton</type>
@@ -73,8 +73,8 @@
                         <method>onGridPrepareColumnsAfter</method>
                     </mageaustralia_admingrid>
                 </observers>
-            </admingrid_prepare_columns_after>
-            <admingrid_collection_load_after>
+            </adminhtml_block_widget_grid_prepare_columns_after>
+            <adminhtml_block_widget_grid_prepare_collection_after>
                 <observers>
                     <mageaustralia_admingrid_hydrate>
                         <type>singleton</type>
@@ -82,7 +82,7 @@
                         <method>onCollectionLoadAfter</method>
                     </mageaustralia_admingrid_hydrate>
                 </observers>
-            </admingrid_collection_load_after>
+            </adminhtml_block_widget_grid_prepare_collection_after>
         </events>
     </global>
     <admin>
