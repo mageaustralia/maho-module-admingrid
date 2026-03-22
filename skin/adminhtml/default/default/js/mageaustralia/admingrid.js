@@ -236,10 +236,6 @@
 
             const bar = document.createElement('div');
             bar.className = 'admingrid-toolbar';
-            bar.style.cssText = [
-                'display:flex', 'gap:8px', 'align-items:center',
-                'padding:8px 0', 'border-bottom:1px solid #e0e0e0', 'margin-bottom:2px',
-            ].join(';');
 
             bar.appendChild(this.buildColumnsButton());
             bar.appendChild(this.buildProfileSelector());
@@ -259,12 +255,7 @@
             btn.innerHTML = '<span>Columns ▾</span>';
 
             const dd = document.createElement('div');
-            dd.style.cssText = [
-                'display:none', 'position:absolute', 'top:100%', 'left:0', 'z-index:1000',
-                'background:#fff', 'border:1px solid #ccc', 'border-radius:4px',
-                'padding:0', 'min-width:280px', 'max-height:500px', 'overflow-y:auto',
-                'box-shadow:0 4px 12px rgba(0,0,0,0.15)',
-            ].join(';');
+            dd.className = 'admingrid-dropdown';
             this._columnsDropdown = dd;
 
             // Section: Current grid columns (with reorder arrows)
@@ -277,16 +268,16 @@
             // Section: Available attributes (loaded async)
             const availSection = document.createElement('div');
             availSection.id = `admingrid-avail-${this.gridBlockId}`;
+            availSection.className = 'admingrid-avail-section';
             dd.appendChild(availSection);
             this.loadAvailableColumns(availSection);
 
             // Search/filter input
             const searchWrap = document.createElement('div');
-            searchWrap.style.cssText = 'padding:6px 10px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;z-index:1;';
+            searchWrap.className = 'admingrid-search';
             const searchInput = document.createElement('input');
             searchInput.type = 'text';
             searchInput.placeholder = 'Filter columns…';
-            searchInput.style.cssText = 'width:100%;font-size:12px;padding:4px 6px;border:1px solid #ddd;border-radius:3px;box-sizing:border-box;';
             searchInput.addEventListener('input', () => {
                 const q = searchInput.value.toLowerCase();
                 dd.querySelectorAll('[data-filter]').forEach(el => {
@@ -314,7 +305,7 @@
         _addSectionHeader(container, text) {
             const h = document.createElement('div');
             h.textContent = text;
-            h.style.cssText = 'padding:6px 10px;font-size:11px;font-weight:bold;color:#666;text-transform:uppercase;letter-spacing:0.5px;background:#f5f5f5;border-bottom:1px solid #eee;';
+            h.className = 'admingrid-section-header';
             container.appendChild(h);
         }
 
@@ -332,20 +323,16 @@
                 row.draggable = true;
                 row.dataset.colCode = col.code;
                 row.dataset.filter = (col.header + ' ' + col.code).toLowerCase();
-                row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 10px;font-size:12px;line-height:1;cursor:grab;border-bottom:1px solid transparent;';
 
-                // Grip handle
                 const grip = document.createElement('span');
                 grip.textContent = '≡';
-                grip.style.cssText = 'color:#aaa;font-size:16px;flex-shrink:0;line-height:1;';
+                grip.className = 'admingrid-grip';
                 row.appendChild(grip);
 
-                // Checkbox — stop drag when clicking it
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.checked = this.isColumnVisible(col.code);
                 cb.dataset.col = col.code;
-                cb.style.cssText = 'flex-shrink:0;margin:0;';
                 const isCustom = col.code.startsWith('custom_');
                 cb.addEventListener('mousedown', e => e.stopPropagation());
                 cb.addEventListener('change', () => {
@@ -358,9 +345,18 @@
                 });
                 row.appendChild(cb);
 
-                // Label
-                const text = document.createTextNode(col.header || col.code);
-                row.appendChild(text);
+                // Label — click to rename for custom columns
+                const label = document.createElement('span');
+                label.textContent = col.header || col.code;
+                label.className = isCustom ? 'admingrid-label-editable' : 'admingrid-label';
+                if (isCustom) {
+                    label.title = 'Click to rename';
+                    label.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._startRename(label, col.code, container);
+                    });
+                }
+                row.appendChild(label);
 
                 // Drag events
                 row.addEventListener('dragstart', e => {
@@ -426,6 +422,44 @@
             });
 
             return codes.map(c => colMap[c]);
+        }
+
+        _startRename(label, code, container) {
+            const current = label.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = current;
+            input.style.cssText = 'font-size:12px;padding:1px 4px;border:1px solid #1979c3;border-radius:2px;width:100%;box-sizing:border-box;';
+
+            const finish = async (save) => {
+                const newName = input.value.trim();
+                if (save && newName && newName !== current) {
+                    try {
+                        await this.postAction('renameColumn', {
+                            grid_block_id: this.gridBlockId,
+                            column_code: code,
+                            header: newName,
+                        });
+                        label.textContent = newName;
+                        this.reloadGrid();
+                    } catch (e) {
+                        label.textContent = current;
+                        console.error('AdminGrid: rename failed', e);
+                    }
+                }
+                input.replaceWith(label);
+            };
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+                if (e.key === 'Escape') { finish(false); }
+            });
+            input.addEventListener('blur', () => finish(true));
+            input.addEventListener('mousedown', e => e.stopPropagation());
+
+            label.replaceWith(input);
+            input.focus();
+            input.select();
         }
 
         _reorderColumn(srcCode, targetCode, insertAfter, container) {
@@ -498,7 +532,7 @@
 
         _addAvailableRow(container, attr) {
             const lbl = document.createElement('label');
-            lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1.4;color:#555;';
+            lbl.className = 'admingrid-avail-row';
             lbl.dataset.filter = (attr.label + ' ' + attr.code).toLowerCase();
 
             const cb = document.createElement('input');
@@ -594,14 +628,13 @@
 
         buildProfileSelector() {
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:12px;';
+            wrap.className = 'admingrid-profile';
 
             const lbl = document.createElement('span');
             lbl.textContent = 'Profile:';
             wrap.appendChild(lbl);
 
             const sel = document.createElement('select');
-            sel.style.cssText = 'font-size:12px;padding:2px 4px;';
 
             const none = document.createElement('option');
             none.value = '';
@@ -772,7 +805,7 @@
         flash(msg) {
             const el = document.createElement('span');
             el.textContent = msg;
-            el.style.cssText = 'color:#2e7d32;font-weight:bold;font-size:12px;transition:opacity 0.5s;';
+            el.className = 'admingrid-flash';
             this.toolbar?.appendChild(el);
             setTimeout(() => { el.style.opacity = '0'; }, 1500);
             setTimeout(() => el.remove(), 2000);

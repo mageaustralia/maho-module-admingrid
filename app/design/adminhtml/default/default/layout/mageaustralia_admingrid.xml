@@ -6,6 +6,7 @@
             <block type="mageaustralia_admingrid/adminhtml_jsConfig" name="admingrid.js.config" />
         </reference>
         <reference name="head">
+            <action method="addItem"><type>skin_css</type><name>css/mageaustralia/admingrid.css</name></action>
             <action method="addItem"><type>skin_js</type><name>js/mageaustralia/admingrid.js</name></action>
         </reference>
     </default>

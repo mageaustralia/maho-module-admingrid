@@ -17,7 +17,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     protected function _validateSecretKey(): bool
     {
         $action = $this->getRequest()->getActionName();
-        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn'];
+        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn'];
 
         if (in_array($action, $ajaxActions) && $this->getRequest()->getParam('isAjax')) {
             return true;
@@ -511,6 +511,51 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         } catch (Exception $e) {
             Mage::logException($e);
             $this->_sendJson(['error' => 'Failed to add column'], 500);
+        }
+    }
+
+    /**
+     * POST: Rename a custom column's header.
+     */
+    public function renameColumnAction(): void
+    {
+        if (!$this->getRequest()->isPost()) {
+            $this->_sendJson(['error' => 'POST required'], 405);
+            return;
+        }
+
+        $gridBlockId = $this->getRequest()->getParam('grid_block_id');
+        $columnCode = $this->getRequest()->getParam('column_code');
+        $header = trim((string) $this->getRequest()->getParam('header'));
+
+        if (!$gridBlockId || !$columnCode || !$header) {
+            $this->_sendJson(['error' => 'Missing required fields'], 400);
+            return;
+        }
+
+        $grid = Mage::getModel('mageaustralia_admingrid/grid');
+        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
+        if (!$grid->getId()) {
+            $this->_sendJson(['error' => 'Grid not found'], 404);
+            return;
+        }
+
+        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+            ->addFieldToFilter('grid_id', $grid->getId())
+            ->addFieldToFilter('column_code', $columnCode)
+            ->getFirstItem();
+
+        if (!$column->getId()) {
+            $this->_sendJson(['error' => 'Column not found'], 404);
+            return;
+        }
+
+        try {
+            $column->setData('header', $header)->save();
+            $this->_sendJson(['success' => true]);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_sendJson(['error' => 'Failed to rename'], 500);
         }
     }
 
