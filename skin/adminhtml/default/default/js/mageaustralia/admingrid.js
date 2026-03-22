@@ -626,6 +626,15 @@
             saveAs.addEventListener('click', () => this.saveAsNewProfile());
             wrap.appendChild(saveAs);
 
+            // Delete profile button (only shown when a saved profile is selected)
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'scalable';
+            del.innerHTML = '<span>Delete</span>';
+            del.style.cssText = this.profileId ? '' : 'display:none;';
+            del.addEventListener('click', () => this.deleteCurrentProfile(sel, del));
+            wrap.appendChild(del);
+
             return wrap;
         }
 
@@ -703,6 +712,24 @@
                 }
             } catch (e) {
                 console.error('AdminGrid: save-as failed', e);
+            }
+        }
+
+        async deleteCurrentProfile(sel, delBtn) {
+            if (!this.profileId) return;
+            const name = this.getActiveProfileName();
+            if (!confirm(`Delete profile "${name}"?`)) return;
+
+            try {
+                await this.postAction('deleteProfile', { profile_id: this.profileId });
+                this.profileId = null;
+                this.config = [];
+                this.configByCode = {};
+                localStorage.removeItem(STORAGE_PREFIX + this.gridBlockId);
+                document.getElementById(`admingrid-style-${this.gridBlockId}`)?.remove();
+                this.reloadGrid();
+            } catch (e) {
+                console.error('AdminGrid: delete profile failed', e);
             }
         }
 

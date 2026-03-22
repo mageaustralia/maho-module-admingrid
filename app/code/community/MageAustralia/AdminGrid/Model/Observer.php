@@ -122,9 +122,13 @@ class MageAustralia_AdminGrid_Model_Observer
                 $relatedTable = $sourceConfig['related_table'] ?? null;
 
                 if ($relatedTable) {
-                    // Related table — use post-load hydration (same as EAV, no JOINs)
-                    $sortable = false;
-                    $filterClass = false;
+                    // Related table — post-load hydration for data, subquery for sort/filter
+                    $sortExpr = $this->buildRelatedSortExpression($customCol);
+                    if ($sortExpr) {
+                        $filterIndex = $sortExpr;
+                        $sortable = true;
+                        $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_related';
+                    }
                     // Register for hydration
                     $grid->setData('admingrid_related_columns', array_merge(
                         $grid->getData('admingrid_related_columns') ?: [],
@@ -161,7 +165,7 @@ class MageAustralia_AdminGrid_Model_Observer
                 'column_css_class' => 'admingrid-custom',
             ];
 
-            if ($isEav) {
+            if ($isEav || ($sourceType === 'static' && !empty($customCol->getSourceConfig()['related_table']))) {
                 $columnConfig['admingrid_source_config'] = $customCol->getSourceConfig();
             }
 
@@ -286,6 +290,38 @@ class MageAustralia_AdminGrid_Model_Observer
                 . " AND {$valueCond}";
             $collection->getSelect()->where("EXISTS ({$subquery})");
         }
+    }
+
+    /**
+     * Build correlated subquery for sorting/filtering by a related table column.
+     */
+    private function buildRelatedSortExpression(MageAustralia_AdminGrid_Model_Column $customCol)
+    {
+        $sourceConfig = $customCol->getSourceConfig();
+        $colName = $sourceConfig['column_name'] ?? null;
+        $relatedTable = $sourceConfig['related_table'] ?? null;
+        $joinOn = $sourceConfig['join_on'] ?? null;
+
+        if (!$colName || !$relatedTable || !$joinOn) {
+            return null;
+        }
+
+        $resource = Mage::getSingleton('core/resource');
+        $table = $resource->getTableName($relatedTable);
+
+        $joinParts = explode('=', $joinOn);
+        if (count($joinParts) !== 2) {
+            return null;
+        }
+
+        $localCol = trim($joinParts[0]);   // e.g. 'order_id'
+        $remoteCol = trim($joinParts[1]);  // e.g. 'entity_id'
+
+        return new Maho\Db\Expr(
+            "(SELECT {$colName} FROM {$table}"
+            . " WHERE {$remoteCol} = main_table.{$localCol}"
+            . " LIMIT 1)"
+        );
     }
 
     /**
