@@ -67,6 +67,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
     private function renderMultiRow(array $data, ?array $template, string $separator, array $config): string
     {
         $itemSep = $config['item_separator'] ?? 'hr';
+        $thumbSize = $config['thumbnail_size'] ?? 40;
         $blocks = [];
 
         foreach ($data as $rowData) {
@@ -77,13 +78,33 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
                 continue;
             }
 
+            // Render thumbnail if available
+            $thumbHtml = '';
+            if (!empty($rowData['_thumbnail_url'])) {
+                $url = htmlspecialchars($rowData['_thumbnail_url']);
+                $thumbHtml = "<img src=\"{$url}\" alt=\"\" class=\"admingrid-item-thumb\" "
+                    . "style=\"width:{$thumbSize}px;height:{$thumbSize}px;object-fit:contain;\" loading=\"lazy\">";
+            } elseif (isset($rowData['product_id'])) {
+                // Deleted product or no image — show placeholder SVG
+                $thumbHtml = '<svg class="admingrid-item-thumb-placeholder" width="' . $thumbSize . '" height="' . $thumbSize . '" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">'
+                    . '<rect x="3" y="3" width="18" height="18" rx="2"/>'
+                    . '<circle cx="8.5" cy="8.5" r="1.5"/>'
+                    . '<path d="M21 15l-5-5L5 21"/>'
+                    . '</svg>';
+            }
+
             $rendered = $template
                 ? $this->applyTemplate($rowData, $template, $separator)
                 : implode($separator, array_map('htmlspecialchars',
-                    array_filter($rowData, fn($v) => $v !== null && $v !== '')));
+                    array_filter($rowData, fn($v) => $v !== null && $v !== '' && !str_starts_with((string) $v, '_'))));
 
-            if ($rendered) {
-                $blocks[] = $rendered;
+            if ($rendered || $thumbHtml) {
+                if ($thumbHtml) {
+                    $blocks[] = '<span class="admingrid-item-row">' . $thumbHtml
+                        . '<span class="admingrid-item-text">' . $rendered . '</span></span>';
+                } else {
+                    $blocks[] = $rendered;
+                }
             }
         }
 
@@ -116,6 +137,10 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
 
             $parts = [];
             foreach ($lineFields as $field) {
+                // Skip internal fields (product_id is for thumbnail lookup, not display)
+                if ($field === 'product_id' || str_starts_with($field, '_')) {
+                    continue;
+                }
                 if (isset($data[$field]) && (string) $data[$field] !== '') {
                     $value = (string) $data[$field];
                     // Clean up decimal quantities (1.0000 → 1, 2.5000 → 2.5)

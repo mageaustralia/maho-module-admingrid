@@ -531,6 +531,8 @@
                     tags.className = 'admingrid-config-tags';
 
                     lineFields.forEach(field => {
+                        // Skip internal fields in the UI
+                        if (field === 'product_id' || field.startsWith('_')) return;
                         const tag = document.createElement('span');
                         tag.className = 'admingrid-config-tag';
                         tag.textContent = fieldLabels[field] || field;
@@ -581,8 +583,9 @@
 
             const renderAvailable = () => {
                 availContainer.innerHTML = '';
+                const hiddenFields = ['product_id', '_thumbnail_url'];
                 fields.forEach(field => {
-                    if (usedFields.has(field)) return;
+                    if (usedFields.has(field) || hiddenFields.includes(field)) return;
                     const chip = document.createElement('span');
                     chip.className = 'admingrid-config-avail-chip';
                     chip.textContent = fieldLabels[field] || field;
@@ -600,6 +603,34 @@
 
             availDiv.appendChild(availContainer);
             panel.appendChild(availDiv);
+
+            // Thumbnail size (only for multi_row composites with product_id)
+            let thumbSizeInput = null;
+            if (config.multi_row && fields.includes('product_id')) {
+                const thumbDiv = document.createElement('div');
+                thumbDiv.className = 'admingrid-config-thumb';
+
+                const thumbLabel = document.createElement('div');
+                thumbLabel.className = 'admingrid-config-section-label';
+                thumbLabel.textContent = 'Thumbnail Size (px)';
+                thumbDiv.appendChild(thumbLabel);
+
+                thumbSizeInput = document.createElement('input');
+                thumbSizeInput.type = 'number';
+                thumbSizeInput.className = 'admingrid-config-thumb-input';
+                thumbSizeInput.value = config.thumbnail_size || 40;
+                thumbSizeInput.min = 0;
+                thumbSizeInput.max = 200;
+                thumbSizeInput.placeholder = '40';
+                thumbDiv.appendChild(thumbSizeInput);
+
+                const thumbHelp = document.createElement('div');
+                thumbHelp.className = 'admingrid-config-help';
+                thumbHelp.textContent = 'Set to 0 to hide thumbnails.';
+                thumbDiv.appendChild(thumbHelp);
+
+                panel.appendChild(thumbDiv);
+            }
 
             // Style selector
             const styleDiv = document.createElement('div');
@@ -644,8 +675,8 @@
 
                 const updatedConfig = {
                     ...config,
-                    // Keep all fields + field_labels intact — only update template/style
                     template: cleanTemplate,
+                    thumbnail_size: thumbSizeInput ? parseInt(thumbSizeInput.value) || 0 : (config.thumbnail_size || 0),
                     style: styleSelect.value,
                     custom_css: cssInput.value.trim(),
                 };

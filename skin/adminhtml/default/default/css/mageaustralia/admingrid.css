@@ -195,6 +195,30 @@
     margin: 4px 0;
 }
 
+/* Item row with thumbnail */
+.admingrid-item-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.admingrid-item-thumb {
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.admingrid-item-thumb-placeholder {
+    flex-shrink: 0;
+    opacity: 0.5;
+}
+
+.admingrid-item-text {
+    flex: 1;
+    min-width: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
 /* Gear icon */
 .admingrid-gear {
     border: none;
@@ -367,6 +391,15 @@
     min-height: 50px;
     box-sizing: border-box;
     margin-top: 4px;
+}
+
+/* Thumbnail size input */
+.admingrid-config-thumb-input {
+    width: 70px;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
 }
 
 /* Columns button wrapper */

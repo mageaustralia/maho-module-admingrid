@@ -620,15 +620,26 @@ class MageAustralia_AdminGrid_Model_Observer
 
         $rows = $read->fetchAll($select);
 
+        // If product_id is in the fields, batch-fetch thumbnails
+        $thumbnails = [];
+        if (in_array('product_id', $fields)) {
+            $productIds = array_unique(array_column($rows, 'product_id'));
+            if (!empty($productIds)) {
+                $thumbnails = $this->fetchProductThumbnails($productIds);
+            }
+        }
+
         // Group by remote column (the join key)
         $grouped = [];
         foreach ($rows as $row) {
+            // Inject thumbnail URL if available
+            if (!empty($row['product_id']) && isset($thumbnails[$row['product_id']])) {
+                $row['_thumbnail_url'] = $thumbnails[$row['product_id']];
+            }
             $key = $row[$remoteCol];
             if ($multiRow) {
-                // Multiple rows per entity (e.g. order items)
                 $grouped[$key][] = $row;
             } else {
-                // Single row per entity (e.g. address)
                 $grouped[$key] = $row;
             }
         }
@@ -644,7 +655,6 @@ class MageAustralia_AdminGrid_Model_Observer
             $data = $grouped[$key];
 
             if ($multiRow) {
-                // Multi-row: pass array of associative arrays (one per item)
                 $rows = [];
                 foreach ($data as $row) {
                     $assoc = [];
@@ -652,6 +662,10 @@ class MageAustralia_AdminGrid_Model_Observer
                         if (isset($row[$f])) {
                             $assoc[$f] = $row[$f];
                         }
+                    }
+                    // Pass thumbnail URL through
+                    if (isset($row['_thumbnail_url'])) {
+                        $assoc['_thumbnail_url'] = $row['_thumbnail_url'];
                     }
                     if (!empty($assoc)) {
                         $rows[] = $assoc;
@@ -850,6 +864,41 @@ class MageAustralia_AdminGrid_Model_Observer
             self::$_optionsCache[$attrId] = $options;
         }
         return self::$_optionsCache[$attrId];
+    }
+
+    /**
+     * Batch-fetch product thumbnail URLs for a set of product IDs.
+     * Returns array of product_id => thumbnail_url.
+     */
+    private function fetchProductThumbnails(array $productIds): array
+    {
+        $resource = Mage::getSingleton('core/resource');
+        $read = $resource->getConnection('core_read');
+
+        $thumbnailAttr = Mage::getSingleton('eav/config')
+            ->getAttribute('catalog_product', 'thumbnail');
+
+        if (!$thumbnailAttr || !$thumbnailAttr->getId()) {
+            return [];
+        }
+
+        $select = $read->select()
+            ->from($thumbnailAttr->getBackendTable(), ['entity_id', 'value'])
+            ->where('attribute_id = ?', $thumbnailAttr->getId())
+            ->where('entity_id IN (?)', $productIds)
+            ->where('store_id = ?', 0);
+
+        $rows = $read->fetchPairs($select);
+        $mediaUrl = Mage::getBaseUrl(Mage_Core_Model_Store::URL_TYPE_MEDIA) . 'catalog/product';
+
+        $result = [];
+        foreach ($rows as $entityId => $value) {
+            if ($value && $value !== 'no_selection') {
+                $result[$entityId] = $mediaUrl . $value;
+            }
+        }
+
+        return $result;
     }
 
     private function getFilterClassForType(string $columnType): string
