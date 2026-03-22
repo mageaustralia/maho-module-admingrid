@@ -141,6 +141,28 @@
     transition: opacity 0.5s;
 }
 
+/* Width input */
+.admingrid-col-row .admingrid-width {
+    width: 45px;
+    font-size: 11px;
+    padding: 1px 4px;
+    border: 1px solid #ddd;
+    border-radius: 2px;
+    text-align: center;
+    flex-shrink: 0;
+    color: #888;
+}
+
+.admingrid-col-row .admingrid-width:focus {
+    border-color: #1979c3;
+    color: #333;
+    outline: none;
+}
+
+.admingrid-col-row .admingrid-width::placeholder {
+    color: #ccc;
+}
+
 /* Rename input */
 .admingrid-rename-input {
     font-size: 12px;

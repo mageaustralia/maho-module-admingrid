@@ -358,6 +358,21 @@
                 }
                 row.appendChild(label);
 
+                // Width input
+                const widthInput = document.createElement('input');
+                widthInput.type = 'text';
+                widthInput.className = 'admingrid-width';
+                widthInput.placeholder = 'w';
+                const savedWidth = this.configByCode[col.code]?.width || '';
+                widthInput.value = savedWidth;
+                widthInput.title = 'Column width (e.g. 100, 150px)';
+                widthInput.addEventListener('mousedown', e => e.stopPropagation());
+                widthInput.addEventListener('change', () => {
+                    const w = widthInput.value.trim();
+                    this.setColumnWidth(col.code, w);
+                });
+                row.appendChild(widthInput);
+
                 // Drag events
                 row.addEventListener('dragstart', e => {
                     dragSrcCode = col.code;
@@ -690,6 +705,17 @@
         }
 
         // ── Actions ─────────────────────────────────────────────────────
+
+        setColumnWidth(code, width) {
+            this.ensureFullConfig();
+            this.buildConfigIndex();
+            if (this.configByCode[code]) {
+                this.configByCode[code].width = width;
+            }
+            this.config = Object.values(this.configByCode);
+            this.saveToCache();
+            this.isDirty = true;
+        }
 
         toggleColumn(code, visible) {
             let found = false;

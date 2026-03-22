@@ -5,6 +5,13 @@ declare(strict_types=1);
 class MageAustralia_AdminGrid_Model_Observer
 {
     /**
+     * Per-request cache of EAV attribute options keyed by attribute_id.
+     * Avoids repeated getAllOptions() calls when grids render multiple times (e.g. ShipEasy).
+     *
+     * @var array<int, array<string, string>>
+     */
+    private static array $_optionsCache = [];
+    /**
      * Apply user's grid profile after columns are defined.
      *
      * Event: admingrid_prepare_columns_after
@@ -110,10 +117,7 @@ class MageAustralia_AdminGrid_Model_Observer
                     $attr = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
                     if ($attr && $attr->getId() && $attr->usesSource()) {
                         $columnType = 'options';
-                        $options = [];
-                        foreach ($attr->getSource()->getAllOptions(false) as $opt) {
-                            $options[$opt['value']] = $opt['label'];
-                        }
+                        $options = $this->getAttributeOptions($attr);
                     }
                 }
             } elseif ($sourceType === 'static') {
@@ -705,10 +709,7 @@ class MageAustralia_AdminGrid_Model_Observer
 
         // Resolve option labels for select/multiselect attributes
         if ($attribute->usesSource()) {
-            $options = [];
-            foreach ($attribute->getSource()->getAllOptions(false) as $opt) {
-                $options[$opt['value']] = $opt['label'];
-            }
+            $options = $this->getAttributeOptions($attribute);
             foreach ($rows as $entityId => $value) {
                 if (isset($options[$value])) {
                     $rows[$entityId] = $options[$value];
@@ -792,6 +793,25 @@ class MageAustralia_AdminGrid_Model_Observer
         }
 
         $grid->sortColumnsByOrder();
+    }
+
+    /**
+     * Get resolved options (value => label) for a source-backed attribute.
+     * Results are cached per attribute_id for the duration of the request.
+     *
+     * @return array<string, string>
+     */
+    private function getAttributeOptions(Mage_Eav_Model_Entity_Attribute_Abstract $attr): array
+    {
+        $attrId = (int) $attr->getId();
+        if (!isset(self::$_optionsCache[$attrId])) {
+            $options = [];
+            foreach ($attr->getSource()->getAllOptions(false) as $opt) {
+                $options[$opt['value']] = $opt['label'];
+            }
+            self::$_optionsCache[$attrId] = $options;
+        }
+        return self::$_optionsCache[$attrId];
     }
 
     private function getFilterClassForType(string $columnType): string
