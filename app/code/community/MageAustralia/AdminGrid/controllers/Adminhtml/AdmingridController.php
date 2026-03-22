@@ -424,6 +424,20 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             }
         }
 
+        // Composite columns (address views, ordered items)
+        $composites = $helper->getCompositeColumns($gridBlockId);
+        foreach ($composites as $code => $comp) {
+            if (!in_array($code, $existingCodes)) {
+                $available[] = [
+                    'code'      => $code,
+                    'label'     => $comp['label'],
+                    'type'      => 'composite',
+                    'group'     => 'composite',
+                    'config'    => $comp['config'],
+                ];
+            }
+        }
+
         $this->_sendJson(['available' => $available]);
     }
 
@@ -470,10 +484,14 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         }
 
         // Determine source type and config based on group
-        if ($group === 'collection') {
+        if ($group === 'composite') {
+            $sourceType = 'computed';
+            $configRaw = $this->getRequest()->getParam('config');
+            $sourceConfig = is_string($configRaw) ? $configRaw : json_encode($configRaw);
+            $colType = 'text'; // rendered by composite renderer
+        } elseif ($group === 'collection') {
             $sourceType = 'static';
             $configData = ['column_name' => $attrCode];
-            // If from a related table, store JOIN info
             $relatedTable = $this->getRequest()->getParam('related_table');
             $joinOn = $this->getRequest()->getParam('join_on');
             if ($relatedTable) {

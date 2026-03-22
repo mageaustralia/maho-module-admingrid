@@ -509,8 +509,15 @@
                 if (!data.available || data.available.length === 0) return;
 
                 // Split into groups
-                const attributes = data.available.filter(a => a.group === 'attribute');
+                const composites = data.available.filter(a => a.group === 'composite');
                 const collection = data.available.filter(a => a.group === 'collection');
+                const attributes = data.available.filter(a => a.group === 'attribute');
+
+                // Composite columns (address views, ordered items)
+                if (composites.length > 0) {
+                    this._addSectionHeader(container, 'Views');
+                    composites.forEach(col => this._addAvailableRow(container, col));
+                }
 
                 // Table columns section (flat table fields from DB)
                 if (collection.length > 0) {
@@ -545,6 +552,7 @@
             cb.dataset.group = attr.group || 'attribute';
             if (attr.relatedTable) cb.dataset.relatedTable = attr.relatedTable;
             if (attr.joinOn) cb.dataset.joinOn = attr.joinOn;
+            if (attr.config) cb.dataset.config = JSON.stringify(attr.config);
 
             cb.addEventListener('change', () => this.addAttributeColumn(cb));
 
@@ -576,6 +584,7 @@
                 };
                 if (checkbox.dataset.relatedTable) params.related_table = checkbox.dataset.relatedTable;
                 if (checkbox.dataset.joinOn) params.join_on = checkbox.dataset.joinOn;
+                if (checkbox.dataset.config) params.config = checkbox.dataset.config;
 
                 const data = await this.postAction('addColumn', params);
 

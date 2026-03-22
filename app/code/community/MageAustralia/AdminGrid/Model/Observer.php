@@ -142,6 +142,18 @@ class MageAustralia_AdminGrid_Model_Observer
                 }
             }
 
+            if ($sourceType === 'computed') {
+                // Composite/computed column — uses custom renderer, post-load hydration
+                $columnType = 'text';
+                $sortable = false;
+                $filterClass = false;
+                // Register for composite hydration
+                $grid->setData('admingrid_composite_columns', array_merge(
+                    $grid->getData('admingrid_composite_columns') ?: [],
+                    [$customCol],
+                ));
+            }
+
             // Image override
             if ($customCol->getData('column_type') === 'image') {
                 $columnType = 'text';
@@ -171,6 +183,13 @@ class MageAustralia_AdminGrid_Model_Observer
 
             if ($options !== null) {
                 $columnConfig['options'] = $options;
+            }
+
+            // Computed type: composite renderer
+            if ($sourceType === 'computed') {
+                $columnConfig['renderer'] = 'mageaustralia_admingrid/adminhtml_widget_grid_column_renderer_composite';
+                $columnConfig['filter'] = false;
+                $columnConfig['sortable'] = false;
             }
 
             // Image type: render as thumbnail
@@ -377,16 +396,23 @@ class MageAustralia_AdminGrid_Model_Observer
         // Hydrate related-table columns (post-load, no JOINs)
         $relatedColumns = $grid->getData('admingrid_related_columns');
         if (!empty($relatedColumns) && is_array($relatedColumns)) {
-            $grid->setData('admingrid_related_columns', null);
             foreach ($relatedColumns as $customCol) {
                 $this->hydrateRelatedColumn($collection, $customCol);
+            }
+        }
+
+        // Hydrate composite columns (multi-field views)
+        // Note: don't clear — _prepareGrid may be called multiple times (e.g. ShipEasy)
+        $compositeColumns = $grid->getData('admingrid_composite_columns');
+        if (!empty($compositeColumns) && is_array($compositeColumns)) {
+            foreach ($compositeColumns as $customCol) {
+                $this->hydrateCompositeColumn($collection, $customCol);
             }
         }
 
         // Hydrate EAV columns
         $eavColumns = $grid->getData('admingrid_eav_columns');
         if (!empty($eavColumns) && is_array($eavColumns)) {
-            $grid->setData('admingrid_eav_columns', null);
             foreach ($eavColumns as $customCol) {
                 $this->hydrateEavColumn($collection, $customCol);
             }
@@ -491,6 +517,114 @@ class MageAustralia_AdminGrid_Model_Observer
             $key = $item->getData($localCol);
             if ($key !== null && isset($rows[$key])) {
                 $item->setData($columnIndex, $rows[$key]);
+            }
+        }
+    }
+
+    /**
+     * Post-load hydration for composite columns.
+     * Fetches multiple fields from a related table and injects as an array.
+     */
+    private function hydrateCompositeColumn(
+        Varien_Data_Collection_Db $collection,
+        MageAustralia_AdminGrid_Model_Column $customCol,
+    ): void {
+        $sourceConfig = $customCol->getSourceConfig();
+        $table = $sourceConfig['table'] ?? null;
+        $joinOn = $sourceConfig['join_on'] ?? null;
+        $fields = $sourceConfig['fields'] ?? [];
+        $filter = $sourceConfig['filter'] ?? [];
+        $multiRow = $sourceConfig['multi_row'] ?? false;
+
+        if (!$table || !$joinOn || empty($fields)) {
+            return;
+        }
+
+        $joinParts = explode('=', $joinOn);
+        if (count($joinParts) !== 2) {
+            return;
+        }
+
+        $localCol = trim($joinParts[0]);
+        $remoteCol = trim($joinParts[1]);
+
+        // Gather local IDs
+        $localIds = [];
+        foreach ($collection as $item) {
+            $id = $item->getData($localCol);
+            if ($id) {
+                $localIds[] = $id;
+            }
+        }
+
+        if (empty($localIds)) {
+            return;
+        }
+
+        $resource = Mage::getSingleton('core/resource');
+        $read = $resource->getConnection('core_read');
+        $tableName = $resource->getTableName($table);
+
+        $select = $read->select()
+            ->from($tableName, array_merge([$remoteCol], $fields))
+            ->where("{$remoteCol} IN (?)", $localIds);
+
+        // Apply filters (e.g. address_type = 'shipping')
+        foreach ($filter as $filterCol => $filterVal) {
+            if ($filterVal === null) {
+                $select->where("{$filterCol} IS NULL");
+            } else {
+                $select->where("{$filterCol} = ?", $filterVal);
+            }
+        }
+
+        $rows = $read->fetchAll($select);
+
+        // Group by remote column (the join key)
+        $grouped = [];
+        foreach ($rows as $row) {
+            $key = $row[$remoteCol];
+            if ($multiRow) {
+                // Multiple rows per entity (e.g. order items)
+                $grouped[$key][] = $row;
+            } else {
+                // Single row per entity (e.g. address)
+                $grouped[$key] = $row;
+            }
+        }
+
+        // Inject into collection items
+        $code = $customCol->getData('column_code');
+        foreach ($collection as $item) {
+            $key = $item->getData($localCol);
+            if ($key === null || !isset($grouped[$key])) {
+                continue;
+            }
+
+            $data = $grouped[$key];
+
+            if ($multiRow) {
+                // Format: each row as "name (sku) x qty"
+                $lines = [];
+                foreach ($data as $row) {
+                    $parts = [];
+                    foreach ($fields as $f) {
+                        if (!empty($row[$f])) {
+                            $parts[] = $row[$f];
+                        }
+                    }
+                    $lines[] = implode(' ', $parts);
+                }
+                $item->setData($code, $lines);
+            } else {
+                // Format: array of field values for composite renderer
+                $values = [];
+                foreach ($fields as $f) {
+                    if (isset($data[$f]) && $data[$f] !== '') {
+                        $values[] = $data[$f];
+                    }
+                }
+                $item->setData($code, $values);
             }
         }
     }

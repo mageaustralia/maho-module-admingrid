@@ -64,6 +64,90 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
     }
 
     /**
+     * Get pre-built composite columns for a grid.
+     * These are multi-field columns like "Shipping Address" that combine
+     * multiple fields from a related table into a single stacked cell.
+     */
+    public function getCompositeColumns(string $gridBlockId): array
+    {
+        $lower = strtolower($gridBlockId);
+        $composites = [];
+
+        // Order-related grids get address composites
+        $isOrderGrid = str_contains($lower, 'order') && !str_contains($lower, 'product');
+        $isInvoiceGrid = str_contains($lower, 'invoice');
+        $isShipmentGrid = str_contains($lower, 'shipment');
+        $isCreditmemoGrid = str_contains($lower, 'creditmemo');
+
+        if ($isOrderGrid || $isInvoiceGrid || $isShipmentGrid || $isCreditmemoGrid) {
+            // Determine join column
+            $joinLocal = $isOrderGrid ? 'entity_id' : 'order_id';
+
+            $composites['composite_shipping_address'] = [
+                'code'   => 'composite_shipping_address',
+                'label'  => 'Shipping Address',
+                'type'   => 'composite',
+                'config' => [
+                    'table'        => 'sales_flat_order_address',
+                    'join_on'      => $joinLocal . ' = parent_id',
+                    'filter'       => ['address_type' => 'shipping'],
+                    'fields'       => ['firstname', 'lastname', 'street', 'city', 'region', 'postcode', 'country_id'],
+                    'field_labels' => [
+                        'firstname'  => 'First Name',
+                        'lastname'   => 'Last Name',
+                        'street'     => 'Street',
+                        'city'       => 'City',
+                        'region'     => 'Region',
+                        'postcode'   => 'Postcode',
+                        'country_id' => 'Country',
+                    ],
+                ],
+            ];
+
+            $composites['composite_billing_address'] = [
+                'code'   => 'composite_billing_address',
+                'label'  => 'Billing Address',
+                'type'   => 'composite',
+                'config' => [
+                    'table'        => 'sales_flat_order_address',
+                    'join_on'      => $joinLocal . ' = parent_id',
+                    'filter'       => ['address_type' => 'billing'],
+                    'fields'       => ['firstname', 'lastname', 'street', 'city', 'region', 'postcode', 'country_id'],
+                    'field_labels' => [
+                        'firstname'  => 'First Name',
+                        'lastname'   => 'Last Name',
+                        'street'     => 'Street',
+                        'city'       => 'City',
+                        'region'     => 'Region',
+                        'postcode'   => 'Postcode',
+                        'country_id' => 'Country',
+                    ],
+                ],
+            ];
+
+            $composites['composite_ordered_items'] = [
+                'code'   => 'composite_ordered_items',
+                'label'  => 'Ordered Items',
+                'type'   => 'composite',
+                'config' => [
+                    'table'        => 'sales_flat_order_item',
+                    'join_on'      => $joinLocal . ' = order_id',
+                    'filter'       => ['parent_item_id' => null], // exclude child items
+                    'fields'       => ['name', 'sku', 'qty_ordered'],
+                    'multi_row'    => true, // multiple items per order
+                    'field_labels' => [
+                        'name'        => 'Product Name',
+                        'sku'         => 'SKU',
+                        'qty_ordered' => 'Qty',
+                    ],
+                ],
+            ];
+        }
+
+        return $composites;
+    }
+
+    /**
      * Get all available EAV attributes for an entity type.
      * Returns a flat array suitable for the JS columns dropdown.
      *
