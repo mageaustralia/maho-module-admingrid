@@ -163,6 +163,19 @@
     color: #ccc;
 }
 
+/* Composite column cells */
+.admingrid-composite {
+    display: block;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.admingrid-composite-multi .admingrid-composite-sep {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 4px 0;
+}
+
 /* Rename input */
 .admingrid-rename-input {
     font-size: 12px;

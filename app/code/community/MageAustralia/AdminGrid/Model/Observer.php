@@ -100,14 +100,13 @@ class MageAustralia_AdminGrid_Model_Observer
             $filterClass = false; // false = no filter
 
             if ($sourceType === 'eav_attribute') {
-                // EAV: correlated subquery for sort, custom filter class, post-load hydration
-                $sortExpr = $this->buildEavSortExpression($customCol);
-                if ($sortExpr) {
-                    $filterIndex = $sortExpr;
-                    $sortable = true;
-                    $isEav = true;
-                    $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_eav';
-                }
+                // EAV: custom filter class, post-load hydration
+                // Note: correlated subquery sorting disabled — EAV collections can't handle
+                // Expr objects in setOrder() (crashes in _getMappedField).
+                // Sorting by EAV columns requires a future approach (e.g. temp table).
+                $isEav = true;
+                $sortable = false;
+                $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_eav';
 
                 // Resolve options for select attributes
                 $sourceConfig = $customCol->getSourceConfig();
@@ -151,6 +150,19 @@ class MageAustralia_AdminGrid_Model_Observer
                 $columnType = 'text';
                 $sortable = false;
                 $filterClass = false;
+
+                // Merge defaults from Helper for known preset composites
+                $helper = Mage::helper('mageaustralia_admingrid');
+                $presets = $helper->getCompositeColumns($gridBlockId);
+                $presetKey = str_replace('custom_', '', $code);
+                if (isset($presets[$presetKey])) {
+                    $sc = $customCol->getSourceConfig();
+                    $defaults = $presets[$presetKey]['config'];
+                    // Merge: DB config wins, but add missing keys from defaults
+                    $merged = array_merge($defaults, $sc);
+                    $customCol->setData('source_config', json_encode($merged));
+                }
+
                 // Register for composite hydration
                 $grid->setData('admingrid_composite_columns', array_merge(
                     $grid->getData('admingrid_composite_columns') ?: [],
@@ -181,7 +193,7 @@ class MageAustralia_AdminGrid_Model_Observer
                 'column_css_class' => 'admingrid-custom',
             ];
 
-            if ($isEav || ($sourceType === 'static' && !empty($customCol->getSourceConfig()['related_table']))) {
+            if ($isEav || $sourceType === 'computed' || ($sourceType === 'static' && !empty($customCol->getSourceConfig()['related_table']))) {
                 $columnConfig['admingrid_source_config'] = $customCol->getSourceConfig();
             }
 
@@ -608,27 +620,29 @@ class MageAustralia_AdminGrid_Model_Observer
             $data = $grouped[$key];
 
             if ($multiRow) {
-                // Format: each row as "name (sku) x qty"
-                $lines = [];
+                // Multi-row: pass array of associative arrays (one per item)
+                $rows = [];
                 foreach ($data as $row) {
-                    $parts = [];
+                    $assoc = [];
                     foreach ($fields as $f) {
-                        if (!empty($row[$f])) {
-                            $parts[] = $row[$f];
+                        if (isset($row[$f])) {
+                            $assoc[$f] = $row[$f];
                         }
                     }
-                    $lines[] = implode(' ', $parts);
-                }
-                $item->setData($code, $lines);
-            } else {
-                // Format: array of field values for composite renderer
-                $values = [];
-                foreach ($fields as $f) {
-                    if (isset($data[$f]) && $data[$f] !== '') {
-                        $values[] = $data[$f];
+                    if (!empty($assoc)) {
+                        $rows[] = $assoc;
                     }
                 }
-                $item->setData($code, $values);
+                $item->setData($code, $rows);
+            } else {
+                // Single-row: pass associative array keyed by field name
+                $assoc = [];
+                foreach ($fields as $f) {
+                    if (isset($data[$f])) {
+                        $assoc[$f] = $data[$f];
+                    }
+                }
+                $item->setData($code, $assoc);
             }
         }
     }

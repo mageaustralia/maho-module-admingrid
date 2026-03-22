@@ -91,16 +91,27 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                     'table'        => 'sales_flat_order_address',
                     'join_on'      => $joinLocal . ' = parent_id',
                     'filter'       => ['address_type' => 'shipping'],
-                    'fields'       => ['firstname', 'lastname', 'street', 'city', 'region', 'postcode', 'country_id'],
+                    'fields'       => ['firstname', 'lastname', 'company', 'street', 'city', 'region', 'postcode', 'country_id', 'telephone'],
                     'field_labels' => [
                         'firstname'  => 'First Name',
                         'lastname'   => 'Last Name',
+                        'company'    => 'Company',
                         'street'     => 'Street',
                         'city'       => 'City',
-                        'region'     => 'Region',
+                        'region'     => 'State/Province',
                         'postcode'   => 'Postcode',
                         'country_id' => 'Country',
+                        'telephone'  => 'Phone',
                     ],
+                    // Template: group fields per line
+                    'template' => [
+                        ['firstname', 'lastname'],
+                        ['company'],
+                        ['street'],
+                        ['city', 'region', 'postcode'],
+                        ['country_id'],
+                    ],
+                    'separator' => ' ',
                 ],
             ];
 
@@ -112,16 +123,26 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                     'table'        => 'sales_flat_order_address',
                     'join_on'      => $joinLocal . ' = parent_id',
                     'filter'       => ['address_type' => 'billing'],
-                    'fields'       => ['firstname', 'lastname', 'street', 'city', 'region', 'postcode', 'country_id'],
+                    'fields'       => ['firstname', 'lastname', 'company', 'street', 'city', 'region', 'postcode', 'country_id', 'telephone'],
                     'field_labels' => [
                         'firstname'  => 'First Name',
                         'lastname'   => 'Last Name',
+                        'company'    => 'Company',
                         'street'     => 'Street',
                         'city'       => 'City',
-                        'region'     => 'Region',
+                        'region'     => 'State/Province',
                         'postcode'   => 'Postcode',
                         'country_id' => 'Country',
+                        'telephone'  => 'Phone',
                     ],
+                    'template' => [
+                        ['firstname', 'lastname'],
+                        ['company'],
+                        ['street'],
+                        ['city', 'region', 'postcode'],
+                        ['country_id'],
+                    ],
+                    'separator' => ' ',
                 ],
             ];
 
@@ -132,14 +153,20 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                 'config' => [
                     'table'        => 'sales_flat_order_item',
                     'join_on'      => $joinLocal . ' = order_id',
-                    'filter'       => ['parent_item_id' => null], // exclude child items
+                    'filter'       => ['parent_item_id' => null],
                     'fields'       => ['name', 'sku', 'qty_ordered'],
-                    'multi_row'    => true, // multiple items per order
+                    'multi_row'    => true,
                     'field_labels' => [
                         'name'        => 'Product Name',
                         'sku'         => 'SKU',
                         'qty_ordered' => 'Qty',
                     ],
+                    // Template: name on first line, sku x qty on second
+                    'template' => [
+                        ['name'],
+                        ['sku', 'qty_ordered'],
+                    ],
+                    'separator' => ' x ',
                 ],
             ];
         }
