@@ -16,7 +16,7 @@ Inspired by [BL_CustomGrid](https://github.com/mage-eag/mage-enhanced-admin-grid
 - **Drag-to-reorder** — reorder columns via drag handles in the dropdown
 - **Saved profiles** — per admin user, per grid. Switch between profiles instantly
 - **Auto-discover EAV attributes** — all product/customer attributes appear in the dropdown, one-click to add
-- **Auto-discover table columns** — flat table fields discovered via `DESCRIBE`, including extension-added columns (e.g. ShipEasy `szy_*` fields)
+- **Auto-discover table columns** — flat table fields discovered via `DESCRIBE`, including columns added by third-party extensions
 - **Cross-table columns** — invoice/shipment/creditmemo grids can pull columns from order and payment tables
 - **EAV filtering** — dropdown filter for select attributes, text filter for others, using `EXISTS` subqueries
 - **EAV sorting** — correlated subquery in `ORDER BY`, no JOINs
