@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * MageAustralia AdminGrid
+ *
+ * Enhanced admin grids for Maho — column visibility, ordering, saved profiles.
+ * Inspired by BL_CustomGrid by Benoît Leulliette.
+ *
+ * @package    MageAustralia_AdminGrid
+ * @copyright  Copyright (c) 2026 MageAustralia
+ * @license    https://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
+ */
+-->
+<config>
+    <modules>
+        <MageAustralia_AdminGrid>
+            <version>1.0.0</version>
+        </MageAustralia_AdminGrid>
+    </modules>
+    <global>
+        <models>
+            <mageaustralia_admingrid>
+                <class>MageAustralia_AdminGrid_Model</class>
+                <resourceModel>mageaustralia_admingrid_resource</resourceModel>
+            </mageaustralia_admingrid>
+            <mageaustralia_admingrid_resource>
+                <class>MageAustralia_AdminGrid_Model_Resource</class>
+                <entities>
+                    <grid>
+                        <table>mageaustralia_admingrid_grid</table>
+                    </grid>
+                    <profile>
+                        <table>mageaustralia_admingrid_profile</table>
+                    </profile>
+                    <column>
+                        <table>mageaustralia_admingrid_custom_column</table>
+                    </column>
+                    <options_source>
+                        <table>mageaustralia_admingrid_options_source</table>
+                    </options_source>
+                    <options_value>
+                        <table>mageaustralia_admingrid_options_value</table>
+                    </options_value>
+                </entities>
+            </mageaustralia_admingrid_resource>
+        </models>
+        <blocks>
+            <mageaustralia_admingrid>
+                <class>MageAustralia_AdminGrid_Block</class>
+            </mageaustralia_admingrid>
+        </blocks>
+        <helpers>
+            <mageaustralia_admingrid>
+                <class>MageAustralia_AdminGrid_Helper</class>
+            </mageaustralia_admingrid>
+        </helpers>
+        <resources>
+            <mageaustralia_admingrid_setup>
+                <setup>
+                    <module>MageAustralia_AdminGrid</module>
+                </setup>
+                <connection>
+                    <use>core_setup</use>
+                </connection>
+            </mageaustralia_admingrid_setup>
+        </resources>
+        <events>
+            <admingrid_prepare_columns_after>
+                <observers>
+                    <mageaustralia_admingrid>
+                        <type>singleton</type>
+                        <class>MageAustralia_AdminGrid_Model_Observer</class>
+                        <method>onGridPrepareColumnsAfter</method>
+                    </mageaustralia_admingrid>
+                </observers>
+            </admingrid_prepare_columns_after>
+            <admingrid_collection_load_after>
+                <observers>
+                    <mageaustralia_admingrid_hydrate>
+                        <type>singleton</type>
+                        <class>MageAustralia_AdminGrid_Model_Observer</class>
+                        <method>onCollectionLoadAfter</method>
+                    </mageaustralia_admingrid_hydrate>
+                </observers>
+            </admingrid_collection_load_after>
+        </events>
+    </global>
+    <admin>
+        <routers>
+            <adminhtml>
+                <args>
+                    <modules>
+                        <mageaustralia_admingrid before="Mage_Adminhtml">MageAustralia_AdminGrid_Adminhtml</mageaustralia_admingrid>
+                    </modules>
+                </args>
+            </adminhtml>
+        </routers>
+    </admin>
+    <adminhtml>
+        <layout>
+            <updates>
+                <mageaustralia_admingrid>
+                    <file>mageaustralia_admingrid.xml</file>
+                </mageaustralia_admingrid>
+            </updates>
+        </layout>
+    </adminhtml>
+    <default>
+        <mageaustralia_admingrid>
+            <general>
+                <enabled>1</enabled>
+            </general>
+        </mageaustralia_admingrid>
+    </default>
+</config>

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <MageAustralia_AdminGrid>
+            <active>true</active>
+            <codePool>community</codePool>
+            <depends>
+                <Mage_Adminhtml/>
+            </depends>
+        </MageAustralia_AdminGrid>
+    </modules>
+</config>

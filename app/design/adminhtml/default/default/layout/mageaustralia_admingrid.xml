@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<layout>
+    <!-- Load AdminGrid JS config + script on all admin pages -->
+    <default>
+        <reference name="before_body_end">
+            <block type="mageaustralia_admingrid/adminhtml_jsConfig" name="admingrid.js.config" />
+        </reference>
+        <reference name="head">
+            <action method="addItem"><type>skin_js</type><name>js/mageaustralia/admingrid.js</name></action>
+        </reference>
+    </default>
+
+    <!-- Grid registry list -->
+    <adminhtml_admingrid_index>
+        <reference name="content">
+            <block type="mageaustralia_admingrid/adminhtml_config" name="admingrid.config" />
+        </reference>
+    </adminhtml_admingrid_index>
+
+    <!-- Custom columns list for a grid -->
+    <adminhtml_admingrid_columns>
+        <reference name="content">
+            <block type="mageaustralia_admingrid/adminhtml_config_columns" name="admingrid.columns" />
+        </reference>
+    </adminhtml_admingrid_columns>
+
+    <!-- Edit/new custom column form -->
+    <adminhtml_admingrid_editcolumn>
+        <reference name="content">
+            <block type="mageaustralia_admingrid/adminhtml_config_column_edit" name="admingrid.column.edit" />
+        </reference>
+    </adminhtml_admingrid_editcolumn>
+
+    <adminhtml_admingrid_newcolumn>
+        <update handle="adminhtml_admingrid_editcolumn" />
+    </adminhtml_admingrid_newcolumn>
+</layout>

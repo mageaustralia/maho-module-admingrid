@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<config>
+    <menu>
+        <system>
+            <children>
+                <mageaustralia_admingrid translate="title">
+                    <title>Admin Grid Profiles</title>
+                    <sort_order>99</sort_order>
+                    <action>adminhtml/admingrid/index</action>
+                </mageaustralia_admingrid>
+            </children>
+        </system>
+    </menu>
+    <acl>
+        <resources>
+            <admin>
+                <children>
+                    <system>
+                        <children>
+                            <mageaustralia_admingrid translate="title">
+                                <title>Admin Grid Profiles</title>
+                            </mageaustralia_admingrid>
+                        </children>
+                    </system>
+                </children>
+            </admin>
+        </resources>
+    </acl>
+</config>
