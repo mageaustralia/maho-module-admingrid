@@ -18,9 +18,22 @@ class MageAustralia_AdminGrid_Model_Observer
      */
     public function onGridPrepareColumnsAfter(Varien_Event_Observer $observer): void
     {
+        try {
+            $this->_doGridPrepareColumnsAfter($observer);
+        } catch (\Exception $e) {
+            Mage::logException($e);
+        }
+    }
+
+    private function _doGridPrepareColumnsAfter(Varien_Event_Observer $observer): void
+    {
         /** @var Mage_Adminhtml_Block_Widget_Grid $grid */
         $grid = $observer->getEvent()->getGrid();
         $gridBlockId = $observer->getEvent()->getGridBlockId();
+
+        if (!$gridBlockId) {
+            return;
+        }
 
         $helper = Mage::helper('mageaustralia_admingrid');
         if (!$helper->isEnabled()) {
@@ -146,21 +159,26 @@ class MageAustralia_AdminGrid_Model_Observer
             }
 
             if ($sourceType === 'computed') {
-                // Composite/computed column — uses custom renderer, post-load hydration
                 $columnType = 'text';
                 $sortable = false;
                 $filterClass = false;
 
-                // Merge defaults from Helper for known preset composites
-                $helper = Mage::helper('mageaustralia_admingrid');
-                $presets = $helper->getCompositeColumns($gridBlockId);
-                $presetKey = str_replace('custom_', '', $code);
-                if (isset($presets[$presetKey])) {
-                    $sc = $customCol->getSourceConfig();
-                    $defaults = $presets[$presetKey]['config'];
-                    // Merge: DB config wins, but add missing keys from defaults
-                    $merged = array_merge($defaults, $sc);
-                    $customCol->setData('source_config', json_encode($merged));
+                // Merge preset defaults (template, separator, style) if missing from DB config
+                $blockId = $gridModel->getData('grid_block_id');
+                if ($blockId) {
+                    $presets = Mage::helper('mageaustralia_admingrid')->getCompositeColumns($blockId);
+                    $presetKey = str_replace('custom_', '', $code);
+                    if (isset($presets[$presetKey])) {
+                        $sc = $customCol->getSourceConfig();
+                        $defaults = $presets[$presetKey]['config'];
+                        // Only add missing keys — don't override user customizations
+                        foreach ($defaults as $k => $v) {
+                            if (!isset($sc[$k])) {
+                                $sc[$k] = $v;
+                            }
+                        }
+                        $customCol->setData('source_config', json_encode($sc));
+                    }
                 }
 
                 // Register for composite hydration
@@ -409,20 +427,22 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        // Hydrate related-table columns (post-load, no JOINs)
-        $relatedColumns = $grid->getData('admingrid_related_columns');
-        if (!empty($relatedColumns) && is_array($relatedColumns)) {
-            foreach ($relatedColumns as $customCol) {
-                $this->hydrateRelatedColumn($collection, $customCol);
-            }
-        }
+        // Hydrate all custom columns — wrapped in try/catch so one failure doesn't break the grid
+        $hydrationSets = [
+            'admingrid_related_columns'  => 'hydrateRelatedColumn',
+            'admingrid_composite_columns' => 'hydrateCompositeColumn',
+        ];
 
-        // Hydrate composite columns (multi-field views)
-        // Note: don't clear — _prepareGrid may be called multiple times (e.g. ShipEasy)
-        $compositeColumns = $grid->getData('admingrid_composite_columns');
-        if (!empty($compositeColumns) && is_array($compositeColumns)) {
-            foreach ($compositeColumns as $customCol) {
-                $this->hydrateCompositeColumn($collection, $customCol);
+        foreach ($hydrationSets as $dataKey => $method) {
+            $columns = $grid->getData($dataKey);
+            if (!empty($columns) && is_array($columns)) {
+                foreach ($columns as $customCol) {
+                    try {
+                        $this->$method($collection, $customCol);
+                    } catch (\Exception $e) {
+                        Mage::logException($e);
+                    }
+                }
             }
         }
 
@@ -430,7 +450,11 @@ class MageAustralia_AdminGrid_Model_Observer
         $eavColumns = $grid->getData('admingrid_eav_columns');
         if (!empty($eavColumns) && is_array($eavColumns)) {
             foreach ($eavColumns as $customCol) {
-                $this->hydrateEavColumn($collection, $customCol);
+                try {
+                    $this->hydrateEavColumn($collection, $customCol);
+                } catch (\Exception $e) {
+                    Mage::logException($e);
+                }
             }
         }
     }

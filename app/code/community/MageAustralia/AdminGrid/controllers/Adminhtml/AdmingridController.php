@@ -17,7 +17,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     protected function _validateSecretKey(): bool
     {
         $action = $this->getRequest()->getActionName();
-        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn'];
+        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn', 'getColumnConfig', 'updateColumnConfig'];
 
         if (in_array($action, $ajaxActions) && $this->getRequest()->getParam('isAjax')) {
             return true;
@@ -618,6 +618,104 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         } catch (Exception $e) {
             Mage::logException($e);
             $this->_sendJson(['error' => 'Failed to remove column'], 500);
+        }
+    }
+
+    /**
+     * GET: Get a custom column's full source_config (for the composite config panel).
+     */
+    public function getColumnConfigAction(): void
+    {
+        $gridBlockId = $this->getRequest()->getParam('grid_block_id');
+        $columnCode = $this->getRequest()->getParam('column_code');
+
+        if (!$gridBlockId || !$columnCode) {
+            $this->_sendJson(['error' => 'Missing required fields'], 400);
+            return;
+        }
+
+        $grid = Mage::getModel('mageaustralia_admingrid/grid');
+        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
+        if (!$grid->getId()) {
+            $this->_sendJson(['error' => 'Grid not found'], 404);
+            return;
+        }
+
+        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+            ->addFieldToFilter('grid_id', $grid->getId())
+            ->addFieldToFilter('column_code', $columnCode)
+            ->getFirstItem();
+
+        if (!$column->getId()) {
+            $this->_sendJson(['error' => 'Column not found'], 404);
+            return;
+        }
+
+        $config = $column->getSourceConfig();
+
+        // Merge preset defaults if available
+        $presets = Mage::helper('mageaustralia_admingrid')->getCompositeColumns($gridBlockId);
+        $presetKey = str_replace('custom_', '', $columnCode);
+        if (isset($presets[$presetKey])) {
+            $defaults = $presets[$presetKey]['config'];
+            foreach ($defaults as $k => $v) {
+                if (!isset($config[$k])) {
+                    $config[$k] = $v;
+                }
+            }
+        }
+
+        $this->_sendJson(['config' => $config]);
+    }
+
+    /**
+     * POST: Update a custom column's source_config (from the composite config panel).
+     */
+    public function updateColumnConfigAction(): void
+    {
+        if (!$this->getRequest()->isPost()) {
+            $this->_sendJson(['error' => 'POST required'], 405);
+            return;
+        }
+
+        $gridBlockId = $this->getRequest()->getParam('grid_block_id');
+        $columnCode = $this->getRequest()->getParam('column_code');
+        $sourceConfig = $this->getRequest()->getParam('source_config');
+
+        if (!$gridBlockId || !$columnCode || !$sourceConfig) {
+            $this->_sendJson(['error' => 'Missing required fields'], 400);
+            return;
+        }
+
+        $decoded = json_decode($sourceConfig, true);
+        if (!is_array($decoded)) {
+            $this->_sendJson(['error' => 'Invalid JSON'], 400);
+            return;
+        }
+
+        $grid = Mage::getModel('mageaustralia_admingrid/grid');
+        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
+        if (!$grid->getId()) {
+            $this->_sendJson(['error' => 'Grid not found'], 404);
+            return;
+        }
+
+        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+            ->addFieldToFilter('grid_id', $grid->getId())
+            ->addFieldToFilter('column_code', $columnCode)
+            ->getFirstItem();
+
+        if (!$column->getId()) {
+            $this->_sendJson(['error' => 'Column not found'], 404);
+            return;
+        }
+
+        try {
+            $column->setData('source_config', $sourceConfig)->save();
+            $this->_sendJson(['success' => true]);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_sendJson(['error' => 'Failed to save'], 500);
         }
     }
 

@@ -92,6 +92,9 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                     'join_on'      => $joinLocal . ' = parent_id',
                     'filter'       => ['address_type' => 'shipping'],
                     'fields'       => ['firstname', 'lastname', 'company', 'street', 'city', 'region', 'postcode', 'country_id', 'telephone'],
+                    'template'     => [['firstname', 'lastname'], ['company'], ['street'], ['city', 'region', 'postcode'], ['country_id']],
+                    'separator'    => ' ',
+                    'style'        => 'plain',
                     'field_labels' => [
                         'firstname'  => 'First Name',
                         'lastname'   => 'Last Name',
@@ -103,15 +106,6 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                         'country_id' => 'Country',
                         'telephone'  => 'Phone',
                     ],
-                    // Template: group fields per line
-                    'template' => [
-                        ['firstname', 'lastname'],
-                        ['company'],
-                        ['street'],
-                        ['city', 'region', 'postcode'],
-                        ['country_id'],
-                    ],
-                    'separator' => ' ',
                 ],
             ];
 
@@ -124,6 +118,9 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                     'join_on'      => $joinLocal . ' = parent_id',
                     'filter'       => ['address_type' => 'billing'],
                     'fields'       => ['firstname', 'lastname', 'company', 'street', 'city', 'region', 'postcode', 'country_id', 'telephone'],
+                    'template'     => [['firstname', 'lastname'], ['company'], ['street'], ['city', 'region', 'postcode'], ['country_id']],
+                    'separator'    => ' ',
+                    'style'        => 'plain',
                     'field_labels' => [
                         'firstname'  => 'First Name',
                         'lastname'   => 'Last Name',
@@ -135,14 +132,6 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                         'country_id' => 'Country',
                         'telephone'  => 'Phone',
                     ],
-                    'template' => [
-                        ['firstname', 'lastname'],
-                        ['company'],
-                        ['street'],
-                        ['city', 'region', 'postcode'],
-                        ['country_id'],
-                    ],
-                    'separator' => ' ',
                 ],
             ];
 
@@ -154,19 +143,18 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                     'table'        => 'sales_flat_order_item',
                     'join_on'      => $joinLocal . ' = order_id',
                     'filter'       => ['parent_item_id' => null],
-                    'fields'       => ['name', 'sku', 'qty_ordered'],
+                    'fields'       => ['name', 'sku', 'qty_ordered', 'row_total', 'weight'],
+                    'template'     => [['name'], ['sku', 'qty_ordered']],
+                    'separator'    => ' x ',
                     'multi_row'    => true,
+                    'style'        => 'plain',
                     'field_labels' => [
                         'name'        => 'Product Name',
                         'sku'         => 'SKU',
                         'qty_ordered' => 'Qty',
+                        'row_total'   => 'Row Total',
+                        'weight'      => 'Weight',
                     ],
-                    // Template: name on first line, sku x qty on second
-                    'template' => [
-                        ['name'],
-                        ['sku', 'qty_ordered'],
-                    ],
-                    'separator' => ' x ',
                 ],
             ];
         }

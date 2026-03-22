@@ -197,26 +197,41 @@
             if (!headerRow) return;
 
             const hidden = [];
+            const widths = [];
             const ths = headerRow.querySelectorAll('th');
             ths.forEach((th, idx) => {
                 const code = th.getAttribute('data-column-id');
-                if (code && !this.isColumnVisible(code)) {
-                    hidden.push(idx + 1); // nth-child is 1-based
+                if (!code) return;
+                if (!this.isColumnVisible(code)) {
+                    hidden.push(idx + 1);
+                }
+                const w = this.configByCode[code]?.width;
+                if (w) {
+                    const val = /^\d+$/.test(w) ? w + 'px' : w;
+                    widths.push({ n: idx + 1, w: val });
                 }
             });
 
-            if (hidden.length === 0) return;
+            if (hidden.length === 0 && widths.length === 0) return;
 
             const esc = CSS.escape(tableId);
             const style = document.createElement('style');
             style.id = id;
-            const cellRules = hidden.map(n =>
-                `#${esc} tr > :nth-child(${n})`
-            ).join(',\n');
-            const colRules = hidden.map(n =>
-                `#${esc} colgroup col:nth-child(${n})`
-            ).join(',\n');
-            style.textContent = `${cellRules} { display: none !important; }\n${colRules} { width: 0 !important; visibility: collapse !important; }`;
+            let css = '';
+
+            if (hidden.length > 0) {
+                css += hidden.map(n => `#${esc} tr > :nth-child(${n})`).join(',\n')
+                    + ' { display: none !important; }\n';
+                css += hidden.map(n => `#${esc} colgroup col:nth-child(${n})`).join(',\n')
+                    + ' { width: 0 !important; visibility: collapse !important; }\n';
+            }
+
+            widths.forEach(({ n, w }) => {
+                css += `#${esc} colgroup col:nth-child(${n}) { width: ${w} !important; }\n`;
+                css += `#${esc} tr > :nth-child(${n}) { width: ${w} !important; min-width: ${w} !important; }\n`;
+            });
+
+            style.textContent = css;
             document.head.appendChild(style);
 
             // Sync checkbox state in toolbar
@@ -247,7 +262,7 @@
 
         buildColumnsButton() {
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'position:relative;';
+            wrap.className = 'admingrid-columns-wrap';
 
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -371,6 +386,21 @@
                     const w = widthInput.value.trim();
                     this.setColumnWidth(col.code, w);
                 });
+                // Gear icon for composite columns (before width so they align)
+                if (isCustom && col.code.startsWith('custom_composite_')) {
+                    const gear = document.createElement('button');
+                    gear.type = 'button';
+                    gear.className = 'admingrid-gear';
+                    gear.textContent = '\u2699';
+                    gear.title = 'Configure fields & style';
+                    gear.addEventListener('mousedown', e => e.stopPropagation());
+                    gear.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._openCompositeConfig(col.code);
+                    });
+                    row.appendChild(gear);
+                }
+
                 row.appendChild(widthInput);
 
                 // Drag events
@@ -425,6 +455,223 @@
             });
         }
 
+        /**
+         * Open the composite field configurator panel.
+         */
+        async _openCompositeConfig(code) {
+            // Load current config from server
+            let config;
+            try {
+                const url = this.getConfigUrl('getColumnConfig')
+                    + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}&column_code=${encodeURIComponent(code)}&isAjax=true`;
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                const data = await resp.json();
+                if (data.error) return;
+                config = data.config || {};
+            } catch { return; }
+
+            const fieldLabels = config.field_labels || {};
+            const fields = config.fields || [];
+            const template = config.template || fields.map(f => [f]);
+            const style = config.style || 'plain';
+            const customCss = config.custom_css || '';
+
+            // Build modal overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'admingrid-config-overlay';
+
+            const panel = document.createElement('div');
+            panel.className = 'admingrid-config-panel';
+
+            // Header
+            const header = document.createElement('div');
+            header.className = 'admingrid-config-header';
+            header.innerHTML = '<strong>Configure Composite Column</strong>';
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.textContent = '\u2715';
+            closeBtn.className = 'admingrid-config-close';
+            closeBtn.addEventListener('click', () => overlay.remove());
+            header.appendChild(closeBtn);
+            panel.appendChild(header);
+
+            // Field selector: template lines
+            const linesDiv = document.createElement('div');
+            linesDiv.className = 'admingrid-config-lines';
+
+            const linesLabel = document.createElement('div');
+            linesLabel.className = 'admingrid-config-section-label';
+            linesLabel.textContent = 'Fields & Layout';
+            linesDiv.appendChild(linesLabel);
+
+            const linesHelp = document.createElement('div');
+            linesHelp.className = 'admingrid-config-help';
+            linesHelp.textContent = 'Check fields to include. Fields on the same line are separated by a space. Click "+ Line" to start a new line.';
+            linesDiv.appendChild(linesHelp);
+
+            // Build the template editor
+            const linesContainer = document.createElement('div');
+            linesContainer.className = 'admingrid-config-lines-container';
+
+            const usedFields = new Set(template.flat());
+
+            // Render each template line
+            const renderLines = () => {
+                linesContainer.innerHTML = '';
+                template.forEach((lineFields, lineIdx) => {
+                    const lineRow = document.createElement('div');
+                    lineRow.className = 'admingrid-config-line';
+
+                    const lineLabel = document.createElement('span');
+                    lineLabel.className = 'admingrid-config-line-label';
+                    lineLabel.textContent = `Line ${lineIdx + 1}:`;
+                    lineRow.appendChild(lineLabel);
+
+                    const tags = document.createElement('div');
+                    tags.className = 'admingrid-config-tags';
+
+                    lineFields.forEach(field => {
+                        const tag = document.createElement('span');
+                        tag.className = 'admingrid-config-tag';
+                        tag.textContent = fieldLabels[field] || field;
+                        const removeTag = document.createElement('span');
+                        removeTag.className = 'admingrid-config-tag-remove';
+                        removeTag.textContent = '\u2715';
+                        removeTag.addEventListener('click', () => {
+                            template[lineIdx] = template[lineIdx].filter(f => f !== field);
+                            if (template[lineIdx].length === 0) template.splice(lineIdx, 1);
+                            usedFields.delete(field);
+                            renderLines();
+                            renderAvailable();
+                        });
+                        tag.appendChild(removeTag);
+                        tags.appendChild(tag);
+                    });
+
+                    lineRow.appendChild(tags);
+                    linesContainer.appendChild(lineRow);
+                });
+
+                // Add new line button
+                const addLine = document.createElement('button');
+                addLine.type = 'button';
+                addLine.className = 'admingrid-config-add-line';
+                addLine.textContent = '+ Line';
+                addLine.addEventListener('click', () => {
+                    template.push([]);
+                    renderLines();
+                });
+                linesContainer.appendChild(addLine);
+            };
+
+            linesDiv.appendChild(linesContainer);
+            panel.appendChild(linesDiv);
+
+            // Available (unchecked) fields
+            const availDiv = document.createElement('div');
+            availDiv.className = 'admingrid-config-available';
+
+            const availLabel = document.createElement('div');
+            availLabel.className = 'admingrid-config-section-label';
+            availLabel.textContent = 'Available Fields (click to add)';
+            availDiv.appendChild(availLabel);
+
+            const availContainer = document.createElement('div');
+            availContainer.className = 'admingrid-config-avail-fields';
+
+            const renderAvailable = () => {
+                availContainer.innerHTML = '';
+                fields.forEach(field => {
+                    if (usedFields.has(field)) return;
+                    const chip = document.createElement('span');
+                    chip.className = 'admingrid-config-avail-chip';
+                    chip.textContent = fieldLabels[field] || field;
+                    chip.addEventListener('click', () => {
+                        // Add to last template line (or create one)
+                        if (template.length === 0) template.push([]);
+                        template[template.length - 1].push(field);
+                        usedFields.add(field);
+                        renderLines();
+                        renderAvailable();
+                    });
+                    availContainer.appendChild(chip);
+                });
+            };
+
+            availDiv.appendChild(availContainer);
+            panel.appendChild(availDiv);
+
+            // Style selector
+            const styleDiv = document.createElement('div');
+            styleDiv.className = 'admingrid-config-style';
+
+            const styleLabel = document.createElement('div');
+            styleLabel.className = 'admingrid-config-section-label';
+            styleLabel.textContent = 'Style';
+            styleDiv.appendChild(styleLabel);
+
+            const styleSelect = document.createElement('select');
+            styleSelect.className = 'admingrid-config-style-select';
+            [['plain', 'Plain'], ['card', 'Card (light bg)'], ['bordered', 'Bordered'], ['compact', 'Compact'], ['custom', 'Custom CSS']].forEach(([val, label]) => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = label;
+                if (val === style) opt.selected = true;
+                styleSelect.appendChild(opt);
+            });
+            styleDiv.appendChild(styleSelect);
+
+            // Custom CSS textarea
+            const cssInput = document.createElement('textarea');
+            cssInput.className = 'admingrid-config-css-input';
+            cssInput.placeholder = 'e.g. border: 1px dotted red; background: #f0f0f0; padding: 4px;';
+            cssInput.value = customCss;
+            cssInput.style.display = style === 'custom' ? 'block' : 'none';
+            styleSelect.addEventListener('change', () => {
+                cssInput.style.display = styleSelect.value === 'custom' ? 'block' : 'none';
+            });
+            styleDiv.appendChild(cssInput);
+            panel.appendChild(styleDiv);
+
+            // Save button
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'scalable task';
+            saveBtn.innerHTML = '<span>Save Configuration</span>';
+            saveBtn.addEventListener('click', async () => {
+                // Build updated config
+                const cleanTemplate = template.filter(line => line.length > 0);
+
+                const updatedConfig = {
+                    ...config,
+                    // Keep all fields + field_labels intact — only update template/style
+                    template: cleanTemplate,
+                    style: styleSelect.value,
+                    custom_css: cssInput.value.trim(),
+                };
+
+                try {
+                    await this.postAction('updateColumnConfig', {
+                        grid_block_id: this.gridBlockId,
+                        column_code: code,
+                        source_config: JSON.stringify(updatedConfig),
+                    });
+                    overlay.remove();
+                    this.reloadGrid();
+                } catch (e) {
+                    console.error('AdminGrid: save config failed', e);
+                }
+            });
+            panel.appendChild(saveBtn);
+
+            renderLines();
+            renderAvailable();
+
+            overlay.appendChild(panel);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            document.body.appendChild(overlay);
+        }
+
         _getOrderedColumns() {
             const colMap = {};
             this.columns.forEach(c => { if (c.code !== 'massaction') colMap[c.code] = c; });
@@ -444,7 +691,7 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.value = current;
-            input.style.cssText = 'font-size:12px;padding:1px 4px;border:1px solid #1979c3;border-radius:2px;width:100%;box-sizing:border-box;';
+            input.className = 'admingrid-rename-input';
 
             const finish = async (save) => {
                 const newName = input.value.trim();

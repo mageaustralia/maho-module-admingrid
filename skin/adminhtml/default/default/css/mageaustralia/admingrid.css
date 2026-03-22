@@ -170,10 +170,208 @@
     line-height: 1.4;
 }
 
-.admingrid-composite-multi .admingrid-composite-sep {
+/* Style presets */
+.admingrid-composite-card {
+    background: #f0f4f8;
+    border-radius: 4px;
+    padding: 6px 8px;
+}
+
+.admingrid-composite-bordered {
+    border: 1px dotted #999;
+    border-radius: 3px;
+    padding: 5px 7px;
+}
+
+.admingrid-composite-compact {
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+/* Item separator for multi-row composites */
+.admingrid-item-sep {
     border: none;
     border-top: 1px solid #e0e0e0;
     margin: 4px 0;
+}
+
+/* Gear icon */
+.admingrid-gear {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: #888;
+    padding: 0 2px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.admingrid-gear:hover {
+    color: #333;
+}
+
+/* Config panel overlay */
+.admingrid-config-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admingrid-config-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.admingrid-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    font-size: 15px;
+}
+
+.admingrid-config-close {
+    border: none;
+    background: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: #888;
+}
+
+.admingrid-config-section-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 12px 0 6px;
+}
+
+.admingrid-config-help {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 8px;
+}
+
+/* Template lines */
+.admingrid-config-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.admingrid-config-line-label {
+    font-size: 11px;
+    color: #888;
+    min-width: 45px;
+    flex-shrink: 0;
+}
+
+.admingrid-config-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.admingrid-config-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e3f2fd;
+    color: #1565c0;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
+.admingrid-config-tag-remove {
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.admingrid-config-tag-remove:hover {
+    opacity: 1;
+}
+
+.admingrid-config-add-line {
+    border: 1px dashed #ccc;
+    background: none;
+    color: #888;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 6px;
+}
+
+.admingrid-config-add-line:hover {
+    border-color: #1979c3;
+    color: #1979c3;
+}
+
+/* Available field chips */
+.admingrid-config-avail-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.admingrid-config-avail-chip {
+    display: inline-block;
+    background: #f5f5f5;
+    color: #666;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    border: 1px solid #e0e0e0;
+}
+
+.admingrid-config-avail-chip:hover {
+    background: #e3f2fd;
+    color: #1565c0;
+    border-color: #90caf9;
+}
+
+/* Style selector */
+.admingrid-config-style-select {
+    font-size: 12px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+}
+
+.admingrid-config-css-input {
+    width: 100%;
+    font-size: 12px;
+    font-family: monospace;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    min-height: 50px;
+    box-sizing: border-box;
+    margin-top: 4px;
+}
+
+/* Columns button wrapper */
+.admingrid-columns-wrap {
+    position: relative;
 }
 
 /* Rename input */
