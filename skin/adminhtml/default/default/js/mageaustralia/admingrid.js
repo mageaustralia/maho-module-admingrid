@@ -212,8 +212,6 @@
                 }
             });
 
-            if (hidden.length === 0 && widths.length === 0) return;
-
             const esc = CSS.escape(tableId);
             const style = document.createElement('style');
             style.id = id;
@@ -223,13 +221,18 @@
                 css += hidden.map(n => `#${esc} tr > :nth-child(${n})`).join(',\n')
                     + ' { display: none !important; }\n';
                 css += hidden.map(n => `#${esc} colgroup col:nth-child(${n})`).join(',\n')
-                    + ' { width: 0 !important; visibility: collapse !important; }\n';
+                    + ' { display: none !important; }\n';
             }
 
             widths.forEach(({ n, w }) => {
                 css += `#${esc} colgroup col:nth-child(${n}) { width: ${w} !important; }\n`;
                 css += `#${esc} tr > :nth-child(${n}) { width: ${w} !important; min-width: ${w} !important; }\n`;
             });
+
+            // Ensure the table doesn't collapse visible columns to 0
+            if (hidden.length > 0 || widths.length > 0) {
+                css += `#${esc} { table-layout: auto !important; }\n`;
+            }
 
             style.textContent = css;
             document.head.appendChild(style);

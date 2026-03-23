@@ -806,7 +806,9 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        // Apply ordering — build a COMPLETE column order including all grid columns
+        // Apply ordering — directly rebuild the _columns array in the desired order.
+        // We avoid addColumnsOrder/sortColumnsByOrder because accumulated constraints
+        // from addCustomColumns + profile reordering conflict during sequential splicing.
         $configOrder = [];
         foreach ($config as $col) {
             if (isset($col['code'], $col['position'])) {
@@ -818,33 +820,39 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        // Get all grid column codes in their current order
-        $allGridCodes = array_keys($grid->getColumns());
-
-        // Separate into: configured (have a saved position) and unconfigured
+        $currentColumns = $grid->getColumns(); // code => column object
         $configured = [];
         $unconfigured = [];
-        foreach ($allGridCodes as $code) {
+
+        foreach ($currentColumns as $code => $column) {
             if (isset($configOrder[$code])) {
                 $configured[$code] = $configOrder[$code];
             } else {
-                $unconfigured[] = $code;
+                $unconfigured[$code] = $column;
             }
         }
 
-        // Sort configured columns by their saved position
+        // Sort configured by saved position
         asort($configured);
 
-        // Build final ordered list: configured columns in saved order, then unconfigured at the end
-        $finalOrder = array_keys($configured);
-        $finalOrder = array_merge($finalOrder, $unconfigured);
-
-        // Apply ordering using addColumnsOrder (each column "after" the previous one)
-        for ($i = 1; $i < count($finalOrder); $i++) {
-            $grid->addColumnsOrder($finalOrder[$i], $finalOrder[$i - 1]);
+        // Rebuild ordered columns array
+        $ordered = [];
+        foreach ($configured as $code => $pos) {
+            if (isset($currentColumns[$code])) {
+                $ordered[$code] = $currentColumns[$code];
+            }
+        }
+        // Append any unconfigured columns at the end
+        foreach ($unconfigured as $code => $column) {
+            $ordered[$code] = $column;
         }
 
-        $grid->sortColumnsByOrder();
+        // Replace grid's internal columns array
+        // Use reflection since _columns is protected
+        $ref = new \ReflectionProperty($grid, '_columns');
+        $ref->setAccessible(true);
+        $ref->setValue($grid, $ordered);
+        $grid->setData('_lastColumnId', array_key_last($ordered));
     }
 
     /**
