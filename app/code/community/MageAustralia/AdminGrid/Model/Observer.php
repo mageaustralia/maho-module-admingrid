@@ -825,6 +825,10 @@ class MageAustralia_AdminGrid_Model_Observer
         $unconfigured = [];
 
         foreach ($currentColumns as $code => $column) {
+            // Skip massaction — Maho prepends it after our event, so don't include in reorder
+            if ($code === 'massaction') {
+                continue;
+            }
             if (isset($configOrder[$code])) {
                 $configured[$code] = $configOrder[$code];
             } else {
