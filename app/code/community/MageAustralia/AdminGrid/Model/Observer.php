@@ -875,12 +875,6 @@ class MageAustralia_AdminGrid_Model_Observer
     }
 
     /**
-     * Get resolved options (value => label) for a source-backed attribute.
-     * Results are cached per attribute_id for the duration of the request.
-     *
-     * @return array<string, string>
-     */
-    /**
      * Post-load hydration for category columns.
      * Batch-fetches category names for visible products from catalog_category_product.
      */
@@ -945,6 +939,12 @@ class MageAustralia_AdminGrid_Model_Observer
         }
     }
 
+    /**
+     * Get resolved options (value => label) for a source-backed attribute.
+     * Results are cached per attribute_id for the duration of the request.
+     *
+     * @return array<string, string>
+     */
     private function getAttributeOptions(Mage_Eav_Model_Entity_Attribute_Abstract $attr): array
     {
         $attrId = (int) $attr->getId();

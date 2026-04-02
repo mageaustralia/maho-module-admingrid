@@ -788,6 +788,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         return [
             'id'       => (int) $node->getId(),
             'text'     => (string) $node->getName(),
+            'active'   => (bool) $node->getIsActive(),
             'children' => $children,
         ];
     }

@@ -19,8 +19,8 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
 {
     public function getHtml(): string
     {
-        $htmlId = $this->_getHtmlId();
-        $htmlName = $this->_getHtmlName();
+        $htmlId = $this->escapeHtml($this->_getHtmlId());
+        $htmlName = $this->escapeHtml($this->_getHtmlName());
         $value = $this->escapeHtml((string) $this->getValue());
 
         return '<div class="admingrid-category-filter">'
@@ -37,6 +37,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
 
     /**
      * Apply EXISTS subquery filter against catalog_category_product.
+     * Expands selected categories to include all descendants.
      * Returns null to prevent grid's own addFieldToFilter call.
      */
     public function getCondition(): ?array
@@ -56,14 +57,38 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             return null;
         }
 
+        // Expand selected categories to include all descendants (single query)
         $resource = Mage::getSingleton('core/resource');
-        $ccpTable = $resource->getTableName('catalog/category_product');
+        $cceTable = $resource->getTableName('catalog/category');
         $conn = $collection->getConnection();
-        $idList = implode(',', $categoryIds);
 
-        // Use entity_id for product collections (EAV), but handle flat tables too
+        $allIds = $categoryIds;
+        $paths = $conn->fetchCol(
+            $conn->select()
+                ->from($cceTable, ['path'])
+                ->where('entity_id IN (?)', $categoryIds)
+        );
+
+        if (!empty($paths)) {
+            $orConditions = [];
+            foreach ($paths as $path) {
+                $orConditions[] = $conn->quoteInto('path LIKE ?', $path . '/%');
+            }
+            $descendantIds = $conn->fetchCol(
+                $conn->select()
+                    ->from($cceTable, ['entity_id'])
+                    ->where(implode(' OR ', $orConditions))
+            );
+            $allIds = array_merge($allIds, $descendantIds);
+        }
+
+        $allIds = array_unique(array_map('intval', $allIds));
+        $ccpTable = $resource->getTableName('catalog/category_product');
+        $idList = implode(',', $allIds);
+
+        // Determine primary key alias from the collection's FROM clause
         $pkField = 'e.entity_id';
-        $fromPart = $collection->getSelect()->getPart(\Zend_Db_Select::FROM);
+        $fromPart = $collection->getSelect()->getPart(\Maho\Db\Select::FROM);
         if (isset($fromPart['e'])) {
             $pkField = 'e.entity_id';
         } elseif (isset($fromPart['main_table'])) {

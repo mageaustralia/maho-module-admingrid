@@ -1325,6 +1325,7 @@ window.AdminGridCategoryFilter = (() => {
         cb.dataset.name = node.text;
         const span = document.createElement('span');
         span.textContent = node.text;
+        if (node.active === false) span.style.opacity = '0.45';
         label.appendChild(cb);
         label.appendChild(span);
 
