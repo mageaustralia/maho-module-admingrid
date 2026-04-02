@@ -805,9 +805,16 @@
                 if (!data.available || data.available.length === 0) return;
 
                 // Split into groups
+                const categories = data.available.filter(a => a.group === 'category');
                 const composites = data.available.filter(a => a.group === 'composite');
                 const collection = data.available.filter(a => a.group === 'collection');
                 const attributes = data.available.filter(a => a.group === 'attribute');
+
+                // Category column (product grids only)
+                if (categories.length > 0) {
+                    this._addSectionHeader(container, 'Category');
+                    categories.forEach(col => this._addAvailableRow(container, col));
+                }
 
                 // Composite columns (address views, ordered items)
                 if (composites.length > 0) {
@@ -1198,4 +1205,193 @@
 
     if (document.body) watchBody();
     else document.addEventListener('DOMContentLoaded', watchBody);
+})();
+
+// ── Category Tree Filter Popup ──────────────────────────────────────
+window.AdminGridCategoryFilter = (() => {
+    'use strict';
+
+    let _treeCache = null;
+    let _overlay = null;
+    let _targetId = null;
+
+    async function open(hiddenInputId) {
+        _targetId = hiddenInputId;
+
+        if (!_treeCache) {
+            const url = (window.ADMINGRID_CONFIG?.urls?.categoryTree || '') + '?isAjax=true';
+            try {
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                const data = await resp.json();
+                _treeCache = data.tree || [];
+            } catch (e) {
+                console.error('AdminGrid: failed to load category tree', e);
+                return;
+            }
+        }
+
+        const hidden = document.getElementById(hiddenInputId);
+        const selectedIds = hidden?.value
+            ? hidden.value.split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean)
+            : [];
+
+        _buildPopup(_treeCache, selectedIds);
+    }
+
+    function _buildPopup(tree, selectedIds) {
+        close();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'admingrid-cat-overlay';
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+        const panel = document.createElement('div');
+        panel.className = 'admingrid-cat-panel';
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'admingrid-cat-header';
+        header.innerHTML = '<span>Choose Categories To Filter</span>';
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'admingrid-cat-close';
+        closeBtn.textContent = '\u00D7';
+        closeBtn.addEventListener('click', close);
+        header.appendChild(closeBtn);
+
+        // Body — scrollable tree
+        const body = document.createElement('div');
+        body.className = 'admingrid-cat-body';
+        tree.forEach(node => body.appendChild(_buildNode(node, selectedIds)));
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.className = 'admingrid-cat-footer';
+
+        const chooseBtn = document.createElement('button');
+        chooseBtn.type = 'button';
+        chooseBtn.className = 'scalable save';
+        chooseBtn.innerHTML = '<span>Choose</span>';
+        chooseBtn.addEventListener('click', _apply);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'scalable';
+        clearBtn.innerHTML = '<span>Clear</span>';
+        clearBtn.addEventListener('click', () => {
+            body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+        });
+
+        footer.appendChild(clearBtn);
+        footer.appendChild(chooseBtn);
+
+        panel.appendChild(header);
+        panel.appendChild(body);
+        panel.appendChild(footer);
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+        _overlay = overlay;
+    }
+
+    function _buildNode(node, selectedIds, depth = 0) {
+        const wrap = document.createElement('div');
+        wrap.className = 'admingrid-tree-node';
+
+        const row = document.createElement('div');
+        row.className = 'admingrid-tree-row';
+
+        const hasChildren = node.children && node.children.length > 0;
+
+        // Toggle arrow
+        const toggle = document.createElement('span');
+        toggle.className = 'admingrid-tree-toggle';
+        toggle.textContent = hasChildren ? '\u25B6' : '\u00A0\u00A0';
+        if (hasChildren) {
+            toggle.addEventListener('click', () => {
+                const ch = wrap.querySelector('.admingrid-tree-children');
+                if (ch) {
+                    const expanded = ch.classList.toggle('expanded');
+                    toggle.textContent = expanded ? '\u25BC' : '\u25B6';
+                }
+            });
+        }
+
+        // Checkbox + label
+        const label = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = node.id;
+        cb.checked = selectedIds.includes(node.id);
+        cb.dataset.name = node.text;
+        const span = document.createElement('span');
+        span.textContent = node.text;
+        label.appendChild(cb);
+        label.appendChild(span);
+
+        row.appendChild(toggle);
+        row.appendChild(label);
+        wrap.appendChild(row);
+
+        // Children
+        if (hasChildren) {
+            const childrenWrap = document.createElement('div');
+            childrenWrap.className = 'admingrid-tree-children';
+
+            // Auto-expand top level, or if any descendant is selected
+            if (depth === 0 || _hasSelectedDescendant(node, selectedIds)) {
+                childrenWrap.classList.add('expanded');
+                toggle.textContent = '\u25BC';
+            }
+
+            node.children.forEach(child => childrenWrap.appendChild(_buildNode(child, selectedIds, depth + 1)));
+            wrap.appendChild(childrenWrap);
+        }
+
+        return wrap;
+    }
+
+    function _hasSelectedDescendant(node, selectedIds) {
+        if (!node.children) return false;
+        for (const child of node.children) {
+            if (selectedIds.includes(child.id)) return true;
+            if (_hasSelectedDescendant(child, selectedIds)) return true;
+        }
+        return false;
+    }
+
+    function _apply() {
+        if (!_overlay || !_targetId) return;
+
+        const ids = [];
+        const names = [];
+        _overlay.querySelectorAll('input[type=checkbox]:checked').forEach(cb => {
+            ids.push(cb.value);
+            names.push(cb.dataset.name || cb.value);
+        });
+
+        const hidden = document.getElementById(_targetId);
+        const display = document.getElementById(_targetId + '_display');
+        if (hidden) hidden.value = ids.join(',');
+        if (display) display.value = names.join(', ');
+
+        close();
+
+        // Trigger grid filter — find the filter row's search button
+        if (hidden) {
+            const thead = hidden.closest('thead');
+            if (thead) {
+                const searchBtn = thead.querySelector('td.filter-actions button');
+                if (searchBtn) searchBtn.click();
+            }
+        }
+    }
+
+    function close() {
+        if (_overlay) {
+            _overlay.remove();
+            _overlay = null;
+        }
+    }
+
+    return { open, close };
 })();

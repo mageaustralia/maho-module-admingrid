@@ -158,6 +158,15 @@ class MageAustralia_AdminGrid_Model_Observer
                 }
             }
 
+            if ($sourceType === 'category') {
+                $sortable = false;
+                $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_category';
+                $grid->setData('admingrid_category_columns', array_merge(
+                    $grid->getData('admingrid_category_columns') ?: [],
+                    [$customCol],
+                ));
+            }
+
             if ($sourceType === 'computed') {
                 $columnType = 'text';
                 $sortable = false;
@@ -217,6 +226,11 @@ class MageAustralia_AdminGrid_Model_Observer
 
             if ($options !== null) {
                 $columnConfig['options'] = $options;
+            }
+
+            // Category type: category tree filter + name renderer
+            if ($sourceType === 'category') {
+                $columnConfig['renderer'] = 'mageaustralia_admingrid/adminhtml_widget_grid_column_renderer_categories';
             }
 
             // Computed type: composite renderer
@@ -429,8 +443,9 @@ class MageAustralia_AdminGrid_Model_Observer
 
         // Hydrate all custom columns — wrapped in try/catch so one failure doesn't break the grid
         $hydrationSets = [
-            'admingrid_related_columns'  => 'hydrateRelatedColumn',
+            'admingrid_related_columns'   => 'hydrateRelatedColumn',
             'admingrid_composite_columns' => 'hydrateCompositeColumn',
+            'admingrid_category_columns'  => 'hydrateCategoryColumn',
         ];
 
         foreach ($hydrationSets as $dataKey => $method) {
@@ -865,6 +880,71 @@ class MageAustralia_AdminGrid_Model_Observer
      *
      * @return array<string, string>
      */
+    /**
+     * Post-load hydration for category columns.
+     * Batch-fetches category names for visible products from catalog_category_product.
+     */
+    private function hydrateCategoryColumn(
+        Varien_Data_Collection_Db $collection,
+        MageAustralia_AdminGrid_Model_Column $customCol,
+    ): void {
+        $entityIds = [];
+        foreach ($collection as $item) {
+            $id = $item->getData('entity_id') ?: $item->getId();
+            if ($id) {
+                $entityIds[] = (int) $id;
+            }
+        }
+
+        if (empty($entityIds)) {
+            return;
+        }
+
+        $resource = Mage::getSingleton('core/resource');
+        $read = $resource->getConnection('core_read');
+        $ccpTable = $resource->getTableName('catalog/category_product');
+
+        $select = $read->select()
+            ->from($ccpTable, ['product_id', 'category_id'])
+            ->where('product_id IN (?)', $entityIds);
+        $rows = $read->fetchAll($select);
+
+        $catIds = array_unique(array_column($rows, 'category_id'));
+        if (empty($catIds)) {
+            return;
+        }
+
+        // Batch-fetch category names via EAV
+        $nameAttr = Mage::getSingleton('eav/config')
+            ->getAttribute('catalog_category', 'name');
+        $nameTable = $nameAttr->getBackendTable();
+
+        $nameSelect = $read->select()
+            ->from($nameTable, ['entity_id', 'value'])
+            ->where('attribute_id = ?', (int) $nameAttr->getId())
+            ->where('entity_id IN (?)', $catIds)
+            ->where('store_id = ?', 0);
+        $catNames = $read->fetchPairs($nameSelect);
+
+        // Group by product_id
+        $productCats = [];
+        foreach ($rows as $row) {
+            $pid = (int) $row['product_id'];
+            $cid = (int) $row['category_id'];
+            if (isset($catNames[$cid])) {
+                $productCats[$pid][] = $catNames[$cid];
+            }
+        }
+
+        $code = $customCol->getData('column_code');
+        foreach ($collection as $item) {
+            $id = (int) ($item->getData('entity_id') ?: $item->getId());
+            if (isset($productCats[$id])) {
+                $item->setData($code, implode(', ', $productCats[$id]));
+            }
+        }
+    }
+
     private function getAttributeOptions(Mage_Eav_Model_Entity_Attribute_Abstract $attr): array
     {
         $attrId = (int) $attr->getId();

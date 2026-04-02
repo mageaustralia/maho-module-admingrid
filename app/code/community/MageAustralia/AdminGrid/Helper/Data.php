@@ -63,6 +63,11 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         return null;
     }
 
+    public function isProductGrid(string $gridBlockId): bool
+    {
+        return $this->getEntityTypeForGrid($gridBlockId) === 'catalog_product';
+    }
+
     /**
      * Get pre-built composite columns for a grid.
      * These are multi-field columns like "Shipping Address" that combine

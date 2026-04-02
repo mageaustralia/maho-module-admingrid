@@ -416,3 +416,27 @@
     width: 100%;
     box-sizing: border-box;
 }
+
+/* ── Category Filter ────────────────────────────────────── */
+.admingrid-category-filter { display: flex; gap: 4px; align-items: center; }
+.admingrid-category-display { flex: 1; font-size: 11px; cursor: pointer; min-width: 80px; }
+.admingrid-category-btn { padding: 3px 4px; font-size: 13px; cursor: pointer; line-height: 1; border: 1px solid #67767e; background: #67767e; color: #fff; border-radius: 3px; font-weight: bold; letter-spacing: 1px; }
+.admingrid-category-btn:hover { background: #3d5a75; }
+
+/* ── Category Tree Popup ────────────────────────────────── */
+.admingrid-cat-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.admingrid-cat-panel { background: #fff; border-radius: 4px; width: 500px; max-height: 75vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
+.admingrid-cat-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #333; color: #fff; font-weight: bold; font-size: 13px; border-radius: 4px 4px 0 0; }
+.admingrid-cat-close { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; padding: 0 4px; }
+.admingrid-cat-close:hover { color: #f88; }
+.admingrid-cat-body { overflow-y: auto; flex: 1; padding: 12px 8px; min-height: 200px; }
+.admingrid-cat-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid #ddd; }
+
+/* ── Tree Nodes ─────────────────────────────────────────── */
+.admingrid-tree-node { padding-left: 18px; }
+.admingrid-tree-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+.admingrid-tree-toggle { cursor: pointer; font-size: 10px; width: 14px; text-align: center; user-select: none; color: #666; }
+.admingrid-tree-row label { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; margin: 0; }
+.admingrid-tree-row label input[type=checkbox] { margin: 0; }
+.admingrid-tree-children { display: none; }
+.admingrid-tree-children.expanded { display: block; }

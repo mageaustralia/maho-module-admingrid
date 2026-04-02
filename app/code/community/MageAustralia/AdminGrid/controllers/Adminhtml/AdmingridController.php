@@ -17,7 +17,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     protected function _validateSecretKey(): bool
     {
         $action = $this->getRequest()->getActionName();
-        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn', 'getColumnConfig', 'updateColumnConfig'];
+        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn', 'getColumnConfig', 'updateColumnConfig', 'categoryTree'];
 
         if (in_array($action, $ajaxActions) && $this->getRequest()->getParam('isAjax')) {
             return true;
@@ -438,6 +438,26 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             }
         }
 
+        // Category column (product grids only)
+        $helper2 = Mage::helper('mageaustralia_admingrid');
+        if ($helper2->isProductGrid($gridBlockId) && !in_array('categories', $existingCodes)) {
+            $hasCatCol = false;
+            if ($grid->getId()) {
+                $catCheck = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+                    ->addFieldToFilter('grid_id', $grid->getId())
+                    ->addFieldToFilter('source_type', 'category');
+                $hasCatCol = $catCheck->getSize() > 0;
+            }
+            if (!$hasCatCol) {
+                $available[] = [
+                    'code'  => 'categories',
+                    'label' => 'Categories',
+                    'type'  => 'text',
+                    'group' => 'category',
+                ];
+            }
+        }
+
         $this->_sendJson(['available' => $available]);
     }
 
@@ -484,7 +504,13 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         }
 
         // Determine source type and config based on group
-        if ($group === 'composite') {
+        if ($group === 'category') {
+            $columnCode = 'custom_categories';
+            $sourceType = 'category';
+            $sourceConfig = json_encode([]);
+            $colType = 'text';
+            $label = 'Categories';
+        } elseif ($group === 'composite') {
             $sourceType = 'computed';
             $configRaw = $this->getRequest()->getParam('config');
             $sourceConfig = is_string($configRaw) ? $configRaw : json_encode($configRaw);
@@ -717,6 +743,53 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             Mage::logException($e);
             $this->_sendJson(['error' => 'Failed to save'], 500);
         }
+    }
+
+    /**
+     * GET: Return category tree as JSON for the category filter popup.
+     */
+    public function categoryTreeAction(): void
+    {
+        $collection = Mage::getModel('catalog/category')->getCollection()
+            ->addAttributeToSelect('name')
+            ->addAttributeToSelect('is_active')
+            ->setOrder('position', 'ASC');
+
+        $tree = Mage::getResourceSingleton('catalog/category_tree')->load();
+        $tree->addCollectionData($collection);
+
+        // Start from the global root (ID 1) — show all store root categories and their children
+        $globalRoot = $tree->getNodeById(Mage_Catalog_Model_Category::TREE_ROOT_ID);
+        if (!$globalRoot) {
+            $this->_sendJson(['tree' => []]);
+            return;
+        }
+
+        $result = [];
+        foreach ($globalRoot->getChildren() as $storeRoot) {
+            $result[] = $this->_buildTreeNode($storeRoot);
+        }
+
+        $this->_sendJson(['tree' => $result]);
+    }
+
+    /**
+     * Recursively build a category tree node array.
+     */
+    private function _buildTreeNode(Varien_Data_Tree_Node $node): array
+    {
+        $children = [];
+        if ($node->hasChildren()) {
+            foreach ($node->getChildren() as $child) {
+                $children[] = $this->_buildTreeNode($child);
+            }
+        }
+
+        return [
+            'id'       => (int) $node->getId(),
+            'text'     => (string) $node->getName(),
+            'children' => $children,
+        ];
     }
 
     private function _sendJson(array $data, int $httpCode = 200): void

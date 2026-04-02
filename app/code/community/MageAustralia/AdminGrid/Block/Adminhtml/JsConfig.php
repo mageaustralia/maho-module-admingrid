@@ -20,6 +20,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_JsConfig extends Mage_Core_Block_T
                 'saveProfile'   => $this->getUrl('adminhtml/admingrid/saveProfile'),
                 'deleteProfile' => $this->getUrl('adminhtml/admingrid/deleteProfile'),
                 'setDefault'    => $this->getUrl('adminhtml/admingrid/setDefault'),
+                'categoryTree'  => $this->getUrl('adminhtml/admingrid/categoryTree'),
             ],
         ];
 
