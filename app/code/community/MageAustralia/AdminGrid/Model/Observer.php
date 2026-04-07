@@ -934,7 +934,7 @@ class MageAustralia_AdminGrid_Model_Observer
         foreach ($collection as $item) {
             $id = (int) ($item->getData('entity_id') ?: $item->getId());
             if (isset($productCats[$id])) {
-                $item->setData($code, implode(', ', $productCats[$id]));
+                $item->setData($code, implode(', ', array_unique($productCats[$id])));
             }
         }
     }
@@ -986,7 +986,36 @@ class MageAustralia_AdminGrid_Model_Observer
         $result = [];
         foreach ($rows as $entityId => $value) {
             if ($value && $value !== 'no_selection') {
-                $result[$entityId] = $mediaUrl . $value;
+                $result[(int) $entityId] = $mediaUrl . $value;
+            }
+        }
+
+        // Find product IDs that had no thumbnail
+        $missingIds = array_diff(array_map('intval', $productIds), array_keys($result));
+
+        // Fallback: for products without thumbnails, check configurable parent
+        if (!empty($missingIds)) {
+            $superLink = $resource->getTableName('catalog/product_super_link');
+            $parentSelect = $read->select()
+                ->from($superLink, ['product_id', 'parent_id'])
+                ->where('product_id IN (?)', $missingIds);
+            $parentMap = $read->fetchPairs($parentSelect);
+
+            if (!empty($parentMap)) {
+                $parentIds = array_unique(array_values($parentMap));
+                $parentSelect = $read->select()
+                    ->from($thumbnailAttr->getBackendTable(), ['entity_id', 'value'])
+                    ->where('attribute_id = ?', $thumbnailAttr->getId())
+                    ->where('entity_id IN (?)', $parentIds)
+                    ->where('store_id = ?', 0);
+                $parentRows = $read->fetchPairs($parentSelect);
+
+                foreach ($parentMap as $childId => $parentId) {
+                    $parentVal = $parentRows[$parentId] ?? null;
+                    if ($parentVal && $parentVal !== 'no_selection') {
+                        $result[$childId] = $mediaUrl . $parentVal;
+                    }
+                }
             }
         }
 
