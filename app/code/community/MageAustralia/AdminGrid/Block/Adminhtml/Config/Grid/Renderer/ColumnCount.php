@@ -12,6 +12,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Grid_Renderer_ColumnCount e
         if ($collection === false) {
             return '0';
         }
+
         $count = $collection
             ->addActiveGridFilter((int) $row->getId())
             ->getSize();

@@ -11,6 +11,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * @var array<int, array<string, string>>
      */
     private static array $_optionsCache = [];
+
     /**
      * Apply user's grid profile after columns are defined.
      *
@@ -20,8 +21,8 @@ class MageAustralia_AdminGrid_Model_Observer
     {
         try {
             $this->_doGridPrepareColumnsAfter($observer);
-        } catch (\Exception $e) {
-            Mage::logException($e);
+        } catch (\Exception $exception) {
+            Mage::logException($exception);
         }
     }
 
@@ -54,7 +55,7 @@ class MageAustralia_AdminGrid_Model_Observer
 
         // Add custom columns (Phase 4) and register for EAV hydration
         $customColumns = $this->addCustomColumns($grid, $gridModel);
-        if (!empty($customColumns)) {
+        if ($customColumns !== []) {
             $this->registerEavHydration($grid, $customColumns);
         }
 
@@ -90,6 +91,7 @@ class MageAustralia_AdminGrid_Model_Observer
         if ($customColumns === false) {
             return [];
         }
+
         $customColumns->addActiveGridFilter((int) $gridModel->getId());
 
         if ($customColumns->getSize() === 0) {
@@ -143,11 +145,12 @@ class MageAustralia_AdminGrid_Model_Observer
                 if ($relatedTable) {
                     // Related table — post-load hydration for data, subquery for sort/filter
                     $sortExpr = $this->buildRelatedSortExpression($customCol);
-                    if ($sortExpr) {
+                    if ($sortExpr instanceof \Maho\Db\Expr) {
                         $filterIndex = $sortExpr;
                         $sortable = true;
                         $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_related';
                     }
+
                     // Register for hydration
                     $grid->setData('admingrid_related_columns', array_merge(
                         $grid->getData('admingrid_related_columns') ?: [],
@@ -189,6 +192,7 @@ class MageAustralia_AdminGrid_Model_Observer
                                 $sc[$k] = $v;
                             }
                         }
+
                         $customCol->setData('source_config', json_encode($sc));
                     }
                 }
@@ -255,7 +259,7 @@ class MageAustralia_AdminGrid_Model_Observer
             $added[] = $customCol;
         }
 
-        if (!empty($added)) {
+        if ($added !== []) {
             $grid->sortColumnsByOrder();
         }
 
@@ -279,7 +283,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($eavColumns)) {
+        if ($eavColumns === []) {
             return;
         }
 
@@ -329,20 +333,21 @@ class MageAustralia_AdminGrid_Model_Observer
         if (is_array($value)) {
             // Range filter (from/to) for number/date types
             if (!empty($value['from'])) {
-                $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
+                $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
                     . ' WHERE _eav.entity_id = e.entity_id'
-                    . " AND _eav.attribute_id = {$attrId}"
+                    . (' AND _eav.attribute_id = ' . $attrId)
                     . ' AND _eav.store_id = 0'
                     . ' AND _eav.value >= ' . $conn->quote($value['from']);
-                $collection->getSelect()->where("EXISTS ({$subquery})");
+                $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
             }
+
             if (!empty($value['to'])) {
-                $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
+                $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
                     . ' WHERE _eav.entity_id = e.entity_id'
-                    . " AND _eav.attribute_id = {$attrId}"
+                    . (' AND _eav.attribute_id = ' . $attrId)
                     . ' AND _eav.store_id = 0'
                     . ' AND _eav.value <= ' . $conn->quote($value['to']);
-                $collection->getSelect()->where("EXISTS ({$subquery})");
+                $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
             }
         } else {
             // Exact match (options/select) or LIKE (text)
@@ -353,12 +358,12 @@ class MageAustralia_AdminGrid_Model_Observer
                 $valueCond = '_eav.value LIKE ' . $conn->quote('%' . $value . '%');
             }
 
-            $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
+            $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
                 . ' WHERE _eav.entity_id = e.entity_id'
-                . " AND _eav.attribute_id = {$attrId}"
+                . (' AND _eav.attribute_id = ' . $attrId)
                 . ' AND _eav.store_id = 0'
-                . " AND {$valueCond}";
-            $collection->getSelect()->where("EXISTS ({$subquery})");
+                . (' AND ' . $valueCond);
+            $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
         }
     }
 
@@ -379,7 +384,7 @@ class MageAustralia_AdminGrid_Model_Observer
         $resource = Mage::getSingleton('core/resource');
         $table = $resource->getTableName($relatedTable);
 
-        $joinParts = explode('=', $joinOn);
+        $joinParts = explode('=', (string) $joinOn);
         if (count($joinParts) !== 2) {
             return null;
         }
@@ -388,8 +393,8 @@ class MageAustralia_AdminGrid_Model_Observer
         $remoteCol = trim($joinParts[1]);  // e.g. 'entity_id'
 
         return new Maho\Db\Expr(
-            "(SELECT {$colName} FROM {$table}"
-            . " WHERE {$remoteCol} = main_table.{$localCol}"
+            sprintf('(SELECT %s FROM %s', $colName, $table)
+            . sprintf(' WHERE %s = main_table.%s', $remoteCol, $localCol)
             . ' LIMIT 1)',
         );
     }
@@ -398,7 +403,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * @return Maho\Db\Expr|null
      */
     /** @phpstan-ignore method.unused */
-    private function buildEavSortExpression(MageAustralia_AdminGrid_Model_Column $customCol)
+    private function buildEavSortExpression(MageAustralia_AdminGrid_Model_Column $customCol): ?\Maho\Db\Expr
     {
         $sourceConfig = $customCol->getSourceConfig();
         $attrCode = $sourceConfig['attribute_code'] ?? null;
@@ -423,9 +428,9 @@ class MageAustralia_AdminGrid_Model_Observer
             : '';
 
         return new Maho\Db\Expr(
-            "(SELECT value FROM {$backendTable}"
+            '(SELECT value FROM ' . $backendTable
             . ' WHERE entity_id = e.entity_id'
-            . " AND attribute_id = {$attrId}"
+            . (' AND attribute_id = ' . $attrId)
             . $storeClause
             . ' LIMIT 1)',
         );
@@ -498,12 +503,13 @@ class MageAustralia_AdminGrid_Model_Observer
                     'columns' => [],
                 ];
             }
+
             $joinMap[$alias]['columns'][] = $join['column'];
         }
 
         foreach ($joinMap as $alias => $joinInfo) {
             $table = $resource->getTableName($joinInfo['table']);
-            $joinOnParts = explode('=', $joinInfo['join_on']);
+            $joinOnParts = explode('=', (string) $joinInfo['join_on']);
             if (count($joinOnParts) !== 2) {
                 continue;
             }
@@ -516,7 +522,7 @@ class MageAustralia_AdminGrid_Model_Observer
 
             $collection->getSelect()->joinLeft(
                 [$alias => $table],
-                "main_table.{$leftCol} = {$alias}.{$rightCol}",
+                sprintf('main_table.%s = %s.%s', $leftCol, $alias, $rightCol),
                 $columns,
             );
         }
@@ -540,10 +546,11 @@ class MageAustralia_AdminGrid_Model_Observer
         }
 
         // Parse join_on: "order_id = entity_id" → local=order_id, remote=entity_id
-        $joinParts = explode('=', $joinOn);
+        $joinParts = explode('=', (string) $joinOn);
         if (count($joinParts) !== 2) {
             return;
         }
+
         $localCol = trim($joinParts[0]);   // e.g. 'order_id'
         $remoteCol = trim($joinParts[1]);  // e.g. 'entity_id'
 
@@ -556,7 +563,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($localIds)) {
+        if ($localIds === []) {
             return;
         }
 
@@ -566,12 +573,12 @@ class MageAustralia_AdminGrid_Model_Observer
 
         $select = $read->select()
             ->from($table, [$remoteCol, $colName])
-            ->where("{$remoteCol} IN (?)", $localIds);
+            ->where($remoteCol . ' IN (?)', $localIds);
 
         $rows = $read->fetchPairs($select);
 
         // Inject into collection items
-        $code = $customCol->getData('column_code');
+        $customCol->getData('column_code');
         $columnIndex = $colName; // The grid column reads from this index
         foreach ($collection as $item) {
             $key = $item->getData($localCol);
@@ -600,7 +607,7 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        $joinParts = explode('=', $joinOn);
+        $joinParts = explode('=', (string) $joinOn);
         if (count($joinParts) !== 2) {
             return;
         }
@@ -617,7 +624,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($localIds)) {
+        if ($localIds === []) {
             return;
         }
 
@@ -627,14 +634,14 @@ class MageAustralia_AdminGrid_Model_Observer
 
         $select = $read->select()
             ->from($tableName, array_merge([$remoteCol], $fields))
-            ->where("{$remoteCol} IN (?)", $localIds);
+            ->where($remoteCol . ' IN (?)', $localIds);
 
         // Apply filters (e.g. address_type = 'shipping')
         foreach ($filter as $filterCol => $filterVal) {
             if ($filterVal === null) {
-                $select->where("{$filterCol} IS NULL");
+                $select->where($filterCol . ' IS NULL');
             } else {
-                $select->where("{$filterCol} = ?", $filterVal);
+                $select->where($filterCol . ' = ?', $filterVal);
             }
         }
 
@@ -644,7 +651,7 @@ class MageAustralia_AdminGrid_Model_Observer
         $thumbnails = [];
         if (in_array('product_id', $fields)) {
             $productIds = array_unique(array_column($rows, 'product_id'));
-            if (!empty($productIds)) {
+            if ($productIds !== []) {
                 $thumbnails = $this->fetchProductThumbnails($productIds);
             }
         }
@@ -656,6 +663,7 @@ class MageAustralia_AdminGrid_Model_Observer
             if (!empty($row['product_id']) && isset($thumbnails[$row['product_id']])) {
                 $row['_thumbnail_url'] = $thumbnails[$row['product_id']];
             }
+
             $key = $row[$remoteCol];
             if ($multiRow) {
                 $grouped[$key][] = $row;
@@ -668,7 +676,11 @@ class MageAustralia_AdminGrid_Model_Observer
         $code = $customCol->getData('column_code');
         foreach ($collection as $item) {
             $key = $item->getData($localCol);
-            if ($key === null || !isset($grouped[$key])) {
+            if ($key === null) {
+                continue;
+            }
+
+            if (!isset($grouped[$key])) {
                 continue;
             }
 
@@ -683,14 +695,17 @@ class MageAustralia_AdminGrid_Model_Observer
                             $assoc[$f] = $row[$f];
                         }
                     }
+
                     // Pass thumbnail URL through
                     if (isset($row['_thumbnail_url'])) {
                         $assoc['_thumbnail_url'] = $row['_thumbnail_url'];
                     }
-                    if (!empty($assoc)) {
+
+                    if ($assoc !== []) {
                         $rows[] = $assoc;
                     }
                 }
+
                 $item->setData($code, $rows);
             } else {
                 // Single-row: pass associative array keyed by field name
@@ -700,6 +715,7 @@ class MageAustralia_AdminGrid_Model_Observer
                         $assoc[$f] = $data[$f];
                     }
                 }
+
                 $item->setData($code, $assoc);
             }
         }
@@ -730,7 +746,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($entityIds)) {
+        if ($entityIds === []) {
             return;
         }
 
@@ -836,7 +852,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($configOrder)) {
+        if ($configOrder === []) {
             return;
         }
 
@@ -849,6 +865,7 @@ class MageAustralia_AdminGrid_Model_Observer
             if ($code === 'massaction') {
                 continue;
             }
+
             if (isset($configOrder[$code])) {
                 $configured[$code] = $configOrder[$code];
             } else {
@@ -861,11 +878,12 @@ class MageAustralia_AdminGrid_Model_Observer
 
         // Rebuild ordered columns array
         $ordered = [];
-        foreach ($configured as $code => $pos) {
+        foreach (array_keys($configured) as $code) {
             if (isset($currentColumns[$code])) {
                 $ordered[$code] = $currentColumns[$code];
             }
         }
+
         // Append any unconfigured columns at the end
         foreach ($unconfigured as $code => $column) {
             $ordered[$code] = $column;
@@ -874,8 +892,8 @@ class MageAustralia_AdminGrid_Model_Observer
         // Replace grid's internal columns array
         // Use reflection since _columns is protected
         $ref = new \ReflectionProperty($grid, '_columns');
-        $ref->setAccessible(true);
         $ref->setValue($grid, $ordered);
+
         $grid->setData('_lastColumnId', array_key_last($ordered));
     }
 
@@ -895,7 +913,7 @@ class MageAustralia_AdminGrid_Model_Observer
             }
         }
 
-        if (empty($entityIds)) {
+        if ($entityIds === []) {
             return;
         }
 
@@ -909,7 +927,7 @@ class MageAustralia_AdminGrid_Model_Observer
         $rows = $read->fetchAll($select);
 
         $catIds = array_unique(array_column($rows, 'category_id'));
-        if (empty($catIds)) {
+        if ($catIds === []) {
             return;
         }
 
@@ -959,8 +977,10 @@ class MageAustralia_AdminGrid_Model_Observer
             foreach ($attr->getSource()->getAllOptions(false) as $opt) {
                 $options[$opt['value']] = $opt['label'];
             }
+
             self::$_optionsCache[$attrId] = $options;
         }
+
         return self::$_optionsCache[$attrId];
     }
 
@@ -997,10 +1017,10 @@ class MageAustralia_AdminGrid_Model_Observer
         }
 
         // Find product IDs that had no thumbnail
-        $missingIds = array_diff(array_map('intval', $productIds), array_keys($result));
+        $missingIds = array_diff(array_map(intval(...), $productIds), array_keys($result));
 
         // Fallback: for products without thumbnails, check configurable parent
-        if (!empty($missingIds)) {
+        if ($missingIds !== []) {
             $superLink = $resource->getTableName('catalog/product_super_link');
             $parentSelect = $read->select()
                 ->from($superLink, ['product_id', 'parent_id'])
@@ -1052,10 +1072,11 @@ class MageAustralia_AdminGrid_Model_Observer
     {
         $columns = $grid->getColumns();
         $codes = array_keys($columns);
-        $actionIdx = array_search('action', $codes);
+        $actionIdx = array_search('action', $codes, true);
         if ($actionIdx !== false && $actionIdx > 0) {
             return $codes[$actionIdx - 1];
         }
+
         return end($codes) ?: '';
     }
 }

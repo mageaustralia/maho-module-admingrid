@@ -36,8 +36,9 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
         // Build CSS class + inline style
         $cssClass = 'admingrid-composite';
         if ($style !== 'custom' && $style !== 'plain') {
-            $cssClass .= ' admingrid-composite-' . htmlspecialchars($style);
+            $cssClass .= ' admingrid-composite-' . htmlspecialchars((string) $style);
         }
+
         $inlineStyle = ($style === 'custom' && $customCss)
             ? ' style="' . htmlspecialchars($customCss) . '"'
             : '';
@@ -46,11 +47,11 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
             ? $this->renderMultiRow($data, $template, $separator, $config)
             : $this->renderSingleRow($data, $template, $separator);
 
-        if (!$content) {
+        if ($content === '' || $content === '0') {
             return '';
         }
 
-        return "<span class=\"{$cssClass}\"{$inlineStyle}>{$content}</span>";
+        return sprintf('<span class="%s"%s>%s</span>', $cssClass, $inlineStyle, $content);
     }
 
     private function renderSingleRow(array $data, ?array $template, string $separator): string
@@ -60,8 +61,8 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
         }
 
         // Default: filter empties, join with <br>
-        $values = array_filter($data, fn($v) => $v !== null && $v !== '');
-        return implode('<br>', array_map('htmlspecialchars', $values));
+        $values = array_filter($data, fn($v): bool => $v !== null && $v !== '');
+        return implode('<br>', array_map(htmlspecialchars(...), $values));
     }
 
     private function renderMultiRow(array $data, ?array $template, string $separator, array $config): string
@@ -75,15 +76,16 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
                 if ((string) $rowData !== '') {
                     $blocks[] = htmlspecialchars((string) $rowData);
                 }
+
                 continue;
             }
 
             // Render thumbnail if available
             $thumbHtml = '';
             if (!empty($rowData['_thumbnail_url'])) {
-                $url = htmlspecialchars($rowData['_thumbnail_url']);
-                $thumbHtml = "<img src=\"{$url}\" alt=\"\" class=\"admingrid-item-thumb\" "
-                    . "style=\"width:{$thumbSize}px;height:{$thumbSize}px;object-fit:contain;\" loading=\"lazy\">";
+                $url = htmlspecialchars((string) $rowData['_thumbnail_url']);
+                $thumbHtml = sprintf('<img src="%s" alt="" class="admingrid-item-thumb" ', $url)
+                    . sprintf('style="width:%spx;height:%spx;object-fit:contain;" loading="lazy">', $thumbSize, $thumbSize);
             } elseif (isset($rowData['product_id'])) {
                 // Deleted product or no image — show placeholder SVG
                 $thumbHtml = '<svg class="admingrid-item-thumb-placeholder" width="' . $thumbSize . '" height="' . $thumbSize . '" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">'
@@ -96,12 +98,12 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
             $rendered = $template
                 ? $this->applyTemplate($rowData, $template, $separator)
                 : implode($separator, array_map(
-                    'htmlspecialchars',
-                    array_filter($rowData, fn($v) => $v !== null && $v !== '' && !str_starts_with((string) $v, '_')),
+                    htmlspecialchars(...),
+                    array_filter($rowData, fn($v): bool => $v !== null && $v !== '' && !str_starts_with((string) $v, '_')),
                 ));
 
             if ($rendered || $thumbHtml) {
-                if ($thumbHtml) {
+                if ($thumbHtml !== '' && $thumbHtml !== '0') {
                     $blocks[] = '<span class="admingrid-item-row">' . $thumbHtml
                         . '<span class="admingrid-item-text">' . $rendered . '</span></span>';
                 } else {
@@ -110,7 +112,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
             }
         }
 
-        if (empty($blocks)) {
+        if ($blocks === []) {
             return '';
         }
 
@@ -140,20 +142,26 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
             $parts = [];
             foreach ($lineFields as $field) {
                 // Skip internal fields (product_id is for thumbnail lookup, not display)
-                if ($field === 'product_id' || str_starts_with($field, '_')) {
+                if ($field === 'product_id') {
                     continue;
                 }
+
+                if (str_starts_with((string) $field, '_')) {
+                    continue;
+                }
+
                 if (isset($data[$field]) && (string) $data[$field] !== '') {
                     $value = (string) $data[$field];
                     // Clean up decimal quantities (1.0000 → 1, 2.5000 → 2.5)
                     if (is_numeric($value) && str_contains($value, '.')) {
                         $value = rtrim(rtrim($value, '0'), '.');
                     }
+
                     $parts[] = htmlspecialchars($value);
                 }
             }
 
-            if (!empty($parts)) {
+            if ($parts !== []) {
                 $lines[] = implode($separator, $parts);
             }
         }

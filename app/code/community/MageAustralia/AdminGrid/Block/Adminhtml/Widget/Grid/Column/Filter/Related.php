@@ -38,7 +38,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Related 
         $table = $resource->getTableName($relatedTable);
         $conn = $collection->getConnection();
 
-        $joinParts = explode('=', $joinOn);
+        $joinParts = explode('=', (string) $joinOn);
         if (count($joinParts) !== 2) {
             return null;
         }
@@ -47,13 +47,13 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Related 
         $remoteCol = trim($joinParts[1]);
 
         // Text LIKE filter
-        $valueCond = "_rel.{$colName} LIKE " . $conn->quote('%' . $value . '%');
+        $valueCond = sprintf('_rel.%s LIKE ', $colName) . $conn->quote('%' . $value . '%');
 
-        $subquery = "SELECT 1 FROM {$table} AS _rel"
-            . " WHERE _rel.{$remoteCol} = main_table.{$localCol}"
-            . " AND {$valueCond}";
+        $subquery = sprintf('SELECT 1 FROM %s AS _rel', $table)
+            . sprintf(' WHERE _rel.%s = main_table.%s', $remoteCol, $localCol)
+            . (' AND ' . $valueCond);
 
-        $collection->getSelect()->where("EXISTS ({$subquery})");
+        $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
 
         return null;
     }

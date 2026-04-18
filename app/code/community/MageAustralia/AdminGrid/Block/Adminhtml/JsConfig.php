@@ -26,6 +26,6 @@ class MageAustralia_AdminGrid_Block_Adminhtml_JsConfig extends Mage_Core_Block_T
 
         $json = json_encode($config, JSON_UNESCAPED_SLASHES);
 
-        return "<script>window.ADMINGRID_CONFIG = {$json};</script>";
+        return sprintf('<script>window.ADMINGRID_CONFIG = %s;</script>', $json);
     }
 }

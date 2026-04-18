@@ -111,6 +111,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
                 $sourceConfig = $column->getSourceConfig();
                 $data['eav_attribute_code'] = $sourceConfig['attribute_code'] ?? '';
             }
+
             $form->setValues($data);
         }
 
@@ -127,7 +128,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
     {
         $options = [['value' => '', 'label' => $this->__('-- Select Attribute --')]];
 
-        $entityType = Mage::getModel('eav/entity_type')->loadByCode('catalog_product');
+        Mage::getModel('eav/entity_type')->loadByCode('catalog_product');
         $collection = Mage::getResourceModel('catalog/product_attribute_collection')
             ->addVisibleFilter()
             ->setOrder('frontend_label', 'ASC');

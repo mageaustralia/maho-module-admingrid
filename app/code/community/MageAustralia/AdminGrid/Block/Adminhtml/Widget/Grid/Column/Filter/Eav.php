@@ -58,13 +58,13 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav exte
             ? ' AND _eav.store_id = 0'
             : '';
 
-        $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
+        $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
             . ' WHERE _eav.entity_id = e.entity_id'
-            . " AND _eav.attribute_id = {$attrId}"
+            . (' AND _eav.attribute_id = ' . $attrId)
             . $storeClause
-            . " AND {$valueCond}";
+            . (' AND ' . $valueCond);
 
-        $collection->getSelect()->where("EXISTS ({$subquery})");
+        $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
 
         // Return null so the grid doesn't also call addFieldToFilter
         return null;

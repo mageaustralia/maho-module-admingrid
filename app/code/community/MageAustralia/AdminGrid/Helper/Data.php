@@ -9,7 +9,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
     /**
      * Map grid block IDs to their entity type for attribute discovery.
      */
-    private const GRID_ENTITY_MAP = [
+    private const array GRID_ENTITY_MAP = [
         'productGrid'          => 'catalog_product',
         'product_grid'         => 'catalog_product',
         'customer_grid'        => 'customer',
@@ -26,14 +26,14 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
      */
     public function getBlockTypeAlias(Mage_Adminhtml_Block_Widget_Grid $grid): string
     {
-        $class = get_class($grid);
+        $class = $grid::class;
         $config = Mage::getConfig();
 
         foreach (['adminhtml', 'mageaustralia_admingrid'] as $group) {
-            $classPrefix = (string) $config->getNode("global/blocks/{$group}/class");
+            $classPrefix = (string) $config->getNode(sprintf('global/blocks/%s/class', $group));
             if ($classPrefix && str_starts_with($class, $classPrefix)) {
                 $suffix = substr($class, strlen($classPrefix) + 1);
-                $suffix = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $suffix));
+                $suffix = strtolower((string) preg_replace('/([a-z])([A-Z])/', '$1_$2', $suffix));
                 return $group . '/' . $suffix;
             }
         }
@@ -56,6 +56,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         if (str_contains($lower, 'product')) {
             return 'catalog_product';
         }
+
         if (str_contains($lower, 'customer')) {
             return 'customer';
         }
@@ -214,7 +215,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
     /**
      * Map grid block IDs to their underlying flat database tables.
      */
-    private const GRID_TABLE_MAP = [
+    private const array GRID_TABLE_MAP = [
         'sales_order_grid'  => 'sales_flat_order_grid',
         'order_grid'        => 'sales_flat_order_grid',
         'customer_grid'     => 'customer_entity',
@@ -224,7 +225,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
     /**
      * Columns to skip — internal/system columns that aren't useful in grids.
      */
-    private const SKIP_COLUMNS = [
+    private const array SKIP_COLUMNS = [
         'entity_id', 'increment_id', 'store_id', 'created_at', 'updated_at',
         'is_active', 'entity_type_id', 'attribute_set_id', 'parent_id',
         'password_hash', 'rp_token', 'rp_token_created_at',
@@ -240,7 +241,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         $cacheKey = 'admingrid_table_cols_' . md5($gridBlockId);
         $cached = Mage::app()->loadCache($cacheKey);
         if ($cached) {
-            $decoded = json_decode($cached, true);
+            $decoded = json_decode((string) $cached, true);
             if (is_array($decoded)) {
                 return $decoded;
             }
@@ -262,6 +263,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                 if (in_array($colName, self::SKIP_COLUMNS)) {
                     continue;
                 }
+
                 $columns[$colName] = [
                     'code'  => $colName,
                     'label' => $this->humanizeColumnName($colName),
@@ -271,7 +273,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         }
 
         // Related table columns (e.g. order fields for invoice grids)
-        foreach ($tables['related'] as $key => $relConfig) {
+        foreach ($tables['related'] as $relConfig) {
             $relTable = $resource->getTableName($relConfig['table']);
             if (!$conn->isTableExists($relTable)) {
                 continue;
@@ -282,6 +284,7 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
                 if (in_array($colName, self::SKIP_COLUMNS)) {
                     continue;
                 }
+
                 // Skip columns that already exist in primary table
                 if (isset($columns[$colName])) {
                     continue;
@@ -339,24 +342,22 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         }
 
         // Related tables — invoice/shipment/creditmemo can JOIN to order grid + payment
-        if ($primary && $primary !== 'sales_flat_order_grid') {
-            if (str_contains($primary, 'invoice') || str_contains($primary, 'shipment') || str_contains($primary, 'creditmemo')) {
-                $related['sales_flat_order_grid'] = [
-                    'table'   => 'sales_flat_order_grid',
-                    'join_on' => 'order_id = entity_id',
-                    'label'   => 'Order',
-                ];
-                $related['sales_flat_order'] = [
-                    'table'   => 'sales_flat_order',
-                    'join_on' => 'order_id = entity_id',
-                    'label'   => 'Order (Full)',
-                ];
-                $related['sales_flat_order_payment'] = [
-                    'table'   => 'sales_flat_order_payment',
-                    'join_on' => 'order_id = parent_id',
-                    'label'   => 'Payment',
-                ];
-            }
+        if ($primary && $primary !== 'sales_flat_order_grid' && (str_contains($primary, 'invoice') || str_contains($primary, 'shipment') || str_contains($primary, 'creditmemo'))) {
+            $related['sales_flat_order_grid'] = [
+                'table'   => 'sales_flat_order_grid',
+                'join_on' => 'order_id = entity_id',
+                'label'   => 'Order',
+            ];
+            $related['sales_flat_order'] = [
+                'table'   => 'sales_flat_order',
+                'join_on' => 'order_id = entity_id',
+                'label'   => 'Order (Full)',
+            ];
+            $related['sales_flat_order_payment'] = [
+                'table'   => 'sales_flat_order_payment',
+                'join_on' => 'order_id = parent_id',
+                'label'   => 'Payment',
+            ];
         }
 
         // Order grid can access the full order table + payment
@@ -377,27 +378,21 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
     }
 
     /**
-     * @deprecated Use resolveTablesForGrid instead
-     */
-    private function resolveTableForGrid(string $gridBlockId): ?string
-    {
-        return $this->resolveTablesForGrid($gridBlockId)['primary'];
-    }
-
-    /**
      * Map MySQL column types to our grid column types.
      */
     private function mapDbTypeToColumnType(string $dbType): string
     {
         $dbType = strtolower($dbType);
 
-        if (in_array($dbType, ['int', 'smallint', 'tinyint', 'mediumint', 'bigint'])) {
+        if (in_array($dbType, ['int', 'smallint', 'tinyint', 'mediumint', 'bigint'], true)) {
             return 'number';
         }
-        if (in_array($dbType, ['decimal', 'float', 'double'])) {
+
+        if (in_array($dbType, ['decimal', 'float', 'double'], true)) {
             return 'number';
         }
-        if (in_array($dbType, ['date', 'datetime', 'timestamp'])) {
+
+        if (in_array($dbType, ['date', 'datetime', 'timestamp'], true)) {
             return 'date';
         }
 

@@ -47,8 +47,8 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             return null;
         }
 
-        $categoryIds = array_filter(array_map('intval', explode(',', (string) $value)));
-        if (empty($categoryIds)) {
+        $categoryIds = array_filter(array_map(intval(...), explode(',', (string) $value)));
+        if ($categoryIds === []) {
             return null;
         }
 
@@ -74,6 +74,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             foreach ($paths as $path) {
                 $orConditions[] = $conn->quoteInto('path LIKE ?', $path . '/%');
             }
+
             $descendantIds = $conn->fetchCol(
                 $conn->select()
                     ->from($cceTable, ['entity_id'])
@@ -82,7 +83,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             $allIds = array_merge($allIds, $descendantIds);
         }
 
-        $allIds = array_unique(array_map('intval', $allIds));
+        $allIds = array_unique(array_map(intval(...), $allIds));
         $ccpTable = $resource->getTableName('catalog/category_product');
         $idList = implode(',', $allIds);
 
@@ -95,11 +96,11 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             $pkField = 'main_table.entity_id';
         }
 
-        $subquery = "SELECT 1 FROM {$ccpTable} AS _ccp"
-            . " WHERE _ccp.product_id = {$pkField}"
-            . " AND _ccp.category_id IN ({$idList})";
+        $subquery = sprintf('SELECT 1 FROM %s AS _ccp', $ccpTable)
+            . (' WHERE _ccp.product_id = ' . $pkField)
+            . sprintf(' AND _ccp.category_id IN (%s)', $idList);
 
-        $collection->getSelect()->where("EXISTS ({$subquery})");
+        $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
 
         return null;
     }

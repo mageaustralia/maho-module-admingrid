@@ -11,14 +11,14 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
      * the XHR can't supply it. State-changing actions are NOT in this list;
      * they rely on form_key validation via _setForcedFormKeyActions() below.
      */
-    private const READONLY_AJAX_ACTIONS = [
+    private const array READONLY_AJAX_ACTIONS = [
         'load', 'availableColumns', 'getColumnConfig', 'categoryTree',
     ];
 
     /**
      * State-changing AJAX actions — enforce form_key.
      */
-    private const FORCED_FORM_KEY_ACTIONS = [
+    private const array FORCED_FORM_KEY_ACTIONS = [
         'saveColumn', 'deleteColumn',
         'saveProfile', 'deleteProfile', 'setDefault',
         'addColumn', 'removeColumn', 'renameColumn', 'updateColumnConfig',
@@ -42,6 +42,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         if (in_array($action, self::READONLY_AJAX_ACTIONS, true) && $this->getRequest()->getParam('isAjax')) {
             return true;
         }
+
         return parent::_validateSecretKey();
     }
 
@@ -93,7 +94,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         $columnId = (int) $this->getRequest()->getParam('column_id');
         $column = Mage::getModel('mageaustralia_admingrid/column');
 
-        if ($columnId) {
+        if ($columnId !== 0) {
             $column->load($columnId);
             if (!$column->getId()) {
                 $this->_getSession()->addError($this->__('Column not found.'));
@@ -133,7 +134,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
 
         // Validate source_config is valid JSON if provided
         if (!empty($data['source_config'])) {
-            $decoded = json_decode($data['source_config'], true);
+            $decoded = json_decode((string) $data['source_config'], true);
             if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
                 $this->_getSession()->addError($this->__('Source Config must be valid JSON.'));
                 $this->_redirectReferer();
@@ -156,9 +157,9 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             $column->save();
             $this->_getSession()->addSuccess($this->__('Column saved.'));
             $this->_redirect('*/*/columns', ['grid_id' => $gridId]);
-        } catch (Exception $e) {
-            Mage::logException($e);
-            $this->_getSession()->addError($this->__('Failed to save: %s', $e->getMessage()));
+        } catch (Exception $exception) {
+            Mage::logException($exception);
+            $this->_getSession()->addError($this->__('Failed to save: %s', $exception->getMessage()));
             $this->_redirectReferer();
         }
     }
@@ -182,8 +183,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $column->delete();
             $this->_getSession()->addSuccess($this->__('Column deleted.'));
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_getSession()->addError($this->__('Failed to delete.'));
         }
 
@@ -235,7 +236,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             }
         }
 
-        if (!$activeProfile && count($profilesData) > 0) {
+        if (!$activeProfile && $profilesData !== []) {
             $activeProfile = $profiles->getFirstItem();
         }
 
@@ -270,7 +271,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $decoded = json_decode($columnConfig, true);
+        $decoded = json_decode((string) $columnConfig, true);
         if (!is_array($decoded)) {
             $this->_sendJson(['error' => 'Invalid column_config JSON'], 400);
             return;
@@ -306,8 +307,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                 'success'   => true,
                 'profileId' => (int) $profile->getId(),
             ]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to save profile'], 500);
         }
     }
@@ -325,7 +326,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         $userId = (int) Mage::getSingleton('admin/session')->getUser()->getId();
         $profileId = (int) $this->getRequest()->getParam('profile_id');
 
-        if (!$profileId) {
+        if ($profileId === 0) {
             $this->_sendJson(['error' => 'Missing profile_id'], 400);
             return;
         }
@@ -339,8 +340,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $profile->delete();
             $this->_sendJson(['success' => true]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to delete profile'], 500);
         }
     }
@@ -369,8 +370,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $profile->save();
             $this->_sendJson(['success' => true]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to set default'], 500);
         }
     }
@@ -402,10 +403,11 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                 ->getCollection()
                 ->addFieldToFilter('grid_id', $grid->getId());
             foreach ($existing as $col) {
-                $cfg = json_decode($col->getData('source_config') ?: '{}', true);
+                $cfg = json_decode((string) $col->getData('source_config') ?: '{}', true);
                 if (!empty($cfg['attribute_code'])) {
                     $existingCodes[] = $cfg['attribute_code'];
                 }
+
                 if (!empty($cfg['column_name'])) {
                     $existingCodes[] = $cfg['column_name'];
                 }
@@ -439,6 +441,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                     $entry['relatedTable'] = $col['related_table'];
                     $entry['joinOn'] = $col['join_on'];
                 }
+
                 $available[] = $entry;
             }
         }
@@ -467,6 +470,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                     ->addFieldToFilter('source_type', 'category');
                 $hasCatCol = $catCheck->getSize() > 0;
             }
+
             if (!$hasCatCol) {
                 $available[] = [
                     'code'  => 'categories',
@@ -543,6 +547,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                 $configData['related_table'] = $relatedTable;
                 $configData['join_on'] = $joinOn;
             }
+
             $sourceConfig = json_encode($configData);
         } else {
             $sourceType = 'eav_attribute';
@@ -571,8 +576,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                 'columnCode' => $columnCode,
                 'columnId'   => (int) $column->getId(),
             ]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to add column'], 500);
         }
     }
@@ -616,8 +621,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $column->setData('header', $header)->save();
             $this->_sendJson(['success' => true]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to rename'], 500);
         }
     }
@@ -660,8 +665,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $column->delete();
             $this->_sendJson(['success' => true]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to remove column'], 500);
         }
     }
@@ -732,7 +737,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $decoded = json_decode($sourceConfig, true);
+        $decoded = json_decode((string) $sourceConfig, true);
         if (!is_array($decoded)) {
             $this->_sendJson(['error' => 'Invalid JSON'], 400);
             return;
@@ -758,8 +763,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         try {
             $column->setData('source_config', $sourceConfig)->save();
             $this->_sendJson(['success' => true]);
-        } catch (Exception $e) {
-            Mage::logException($e);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
             $this->_sendJson(['error' => 'Failed to save'], 500);
         }
     }
