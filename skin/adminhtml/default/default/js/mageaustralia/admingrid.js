@@ -24,6 +24,16 @@
 (function () {
     'use strict';
 
+    /**
+     * Set a button's label, preserving the <span> wrapper that Maho's
+     * `.scalable` admin button CSS expects.
+     */
+    const setBtnLabel = (btn, text) => {
+        const span = document.createElement('span');
+        span.textContent = text;
+        btn.replaceChildren(span);
+    };
+
     const STORAGE_PREFIX = 'admingrid_';
     const INITIALIZED = new WeakSet();
 
@@ -260,7 +270,7 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'scalable';
-            btn.innerHTML = '<span>Columns ▾</span>';
+            setBtnLabel(btn, 'Columns ▾');
 
             const dd = document.createElement('div');
             dd.className = 'admingrid-dropdown';
@@ -478,7 +488,9 @@
             // Header
             const header = document.createElement('div');
             header.className = 'admingrid-config-header';
-            header.innerHTML = '<strong>Configure Composite Column</strong>';
+            const headerStrong = document.createElement('strong');
+            headerStrong.textContent = 'Configure Composite Column';
+            header.appendChild(headerStrong);
             const closeBtn = document.createElement('button');
             closeBtn.type = 'button';
             closeBtn.textContent = '\u2715';
@@ -660,7 +672,7 @@
             const saveBtn = document.createElement('button');
             saveBtn.type = 'button';
             saveBtn.className = 'scalable task';
-            saveBtn.innerHTML = '<span>Save Configuration</span>';
+            setBtnLabel(saveBtn, 'Save Configuration');
             saveBtn.addEventListener('click', async () => {
                 // Build updated config
                 const cleanTemplate = template.filter(line => line.length > 0);
@@ -954,7 +966,7 @@
             const saveAs = document.createElement('button');
             saveAs.type = 'button';
             saveAs.className = 'scalable';
-            saveAs.innerHTML = '<span>Save As…</span>';
+            setBtnLabel(saveAs, 'Save As…');
             saveAs.addEventListener('click', () => this.saveAsNewProfile());
             wrap.appendChild(saveAs);
 
@@ -962,7 +974,7 @@
             const del = document.createElement('button');
             del.type = 'button';
             del.className = 'scalable';
-            del.innerHTML = '<span>Delete</span>';
+            setBtnLabel(del, 'Delete');
             del.style.cssText = this.profileId ? '' : 'display:none;';
             del.addEventListener('click', () => this.deleteCurrentProfile(sel, del));
             wrap.appendChild(del);
@@ -974,7 +986,7 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'scalable task';
-            btn.innerHTML = '<span>Save</span>';
+            setBtnLabel(btn, 'Save');
             btn.addEventListener('click', () => this.saveCurrentProfile());
             return btn;
         }
@@ -1229,7 +1241,9 @@ window.AdminGridCategoryFilter = (() => {
         // Header
         const header = document.createElement('div');
         header.className = 'admingrid-cat-header';
-        header.innerHTML = '<span>Choose Categories To Filter</span>';
+        const headerSpan = document.createElement('span');
+        headerSpan.textContent = 'Choose Categories To Filter';
+        header.appendChild(headerSpan);
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'admingrid-cat-close';
@@ -1249,13 +1263,13 @@ window.AdminGridCategoryFilter = (() => {
         const chooseBtn = document.createElement('button');
         chooseBtn.type = 'button';
         chooseBtn.className = 'scalable save';
-        chooseBtn.innerHTML = '<span>Choose</span>';
+        setBtnLabel(chooseBtn, 'Choose');
         chooseBtn.addEventListener('click', _apply);
 
         const clearBtn = document.createElement('button');
         clearBtn.type = 'button';
         clearBtn.className = 'scalable';
-        clearBtn.innerHTML = '<span>Clear</span>';
+        setBtnLabel(clearBtn, 'Clear');
         clearBtn.addEventListener('click', () => {
             body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
         });

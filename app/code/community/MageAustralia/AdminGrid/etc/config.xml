@@ -104,6 +104,15 @@
                 </mageaustralia_admingrid>
             </updates>
         </layout>
+        <translate>
+            <modules>
+                <MageAustralia_AdminGrid>
+                    <files>
+                        <default>MageAustralia_AdminGrid.csv</default>
+                    </files>
+                </MageAustralia_AdminGrid>
+            </modules>
+        </translate>
     </adminhtml>
     <default>
         <mageaustralia_admingrid>
