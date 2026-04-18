@@ -4,25 +4,44 @@ declare(strict_types=1);
 
 class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminhtml_Controller_Action
 {
-    protected function _isAllowed(): bool
+    public const ADMIN_RESOURCE = 'system/mageaustralia_admingrid';
+
+    /**
+     * Read-only AJAX actions — permit skipping the URL secret key since
+     * the XHR can't supply it. State-changing actions are NOT in this list;
+     * they rely on form_key validation via _setForcedFormKeyActions() below.
+     */
+    private const READONLY_AJAX_ACTIONS = [
+        'load', 'availableColumns', 'getColumnConfig', 'categoryTree',
+    ];
+
+    /**
+     * State-changing AJAX actions — enforce form_key.
+     */
+    private const FORCED_FORM_KEY_ACTIONS = [
+        'saveColumn', 'deleteColumn',
+        'saveProfile', 'deleteProfile', 'setDefault',
+        'addColumn', 'removeColumn', 'renameColumn', 'updateColumnConfig',
+    ];
+
+    #[\Override]
+    public function preDispatch(): static
     {
-        return Mage::getSingleton('admin/session')
-            ->isAllowed('system/mageaustralia_admingrid');
+        $this->_setForcedFormKeyActions(self::FORCED_FORM_KEY_ACTIONS);
+        return parent::preDispatch();
     }
 
     /**
-     * Skip secret key validation for AJAX actions.
-     * These are protected by form_key + session auth instead.
+     * Skip URL secret-key check only for genuinely read-only AJAX actions.
+     * State-changing actions still require form_key (enforced by preDispatch).
      */
+    #[\Override]
     protected function _validateSecretKey(): bool
     {
         $action = $this->getRequest()->getActionName();
-        $ajaxActions = ['load', 'saveProfile', 'deleteProfile', 'setDefault', 'availableColumns', 'addColumn', 'removeColumn', 'renameColumn', 'getColumnConfig', 'updateColumnConfig', 'categoryTree'];
-
-        if (in_array($action, $ajaxActions) && $this->getRequest()->getParam('isAjax')) {
+        if (in_array($action, self::READONLY_AJAX_ACTIONS, true) && $this->getRequest()->getParam('isAjax')) {
             return true;
         }
-
         return parent::_validateSecretKey();
     }
 
@@ -776,7 +795,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Recursively build a category tree node array.
      */
-    private function _buildTreeNode(Varien_Data_Tree_Node $node): array
+    private function _buildTreeNode(\Maho\Data\Tree\Node $node): array
     {
         $children = [];
         if ($node->hasChildren()) {

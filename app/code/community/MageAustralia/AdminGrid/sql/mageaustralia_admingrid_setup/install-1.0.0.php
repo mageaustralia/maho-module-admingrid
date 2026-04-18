@@ -17,7 +17,7 @@ if (!$connection->isTableExists($gridTable)) {
         ->newTable($gridTable)
         ->addColumn(
             'grid_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             [
                 'identity' => true,
@@ -29,25 +29,25 @@ if (!$connection->isTableExists($gridTable)) {
         )
         ->addColumn(
             'block_type',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             255,
             ['nullable' => false],
             'Grid Block Class Alias',
         )
         ->addColumn(
             'grid_block_id',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             100,
             ['nullable' => false],
             'Grid Block HTML ID',
         )
         ->addColumn(
             'created_at',
-            Varien_Db_Ddl_Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
             null,
             [
                 'nullable' => false,
-                'default'  => Varien_Db_Ddl_Table::TIMESTAMP_INIT,
+                'default'  => \Maho\Db\Ddl\Table::TIMESTAMP_INIT,
             ],
             'Created At',
         )
@@ -70,7 +70,7 @@ if (!$connection->isTableExists($profileTable)) {
         ->newTable($profileTable)
         ->addColumn(
             'profile_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             [
                 'identity' => true,
@@ -82,56 +82,56 @@ if (!$connection->isTableExists($profileTable)) {
         )
         ->addColumn(
             'grid_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['unsigned' => true, 'nullable' => false],
             'Grid ID',
         )
         ->addColumn(
             'user_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['unsigned' => true, 'nullable' => false],
             'Admin User ID',
         )
         ->addColumn(
             'profile_name',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             100,
             ['nullable' => false, 'default' => 'Default'],
             'Profile Name',
         )
         ->addColumn(
             'is_default',
-            Varien_Db_Ddl_Table::TYPE_SMALLINT,
+            \Maho\Db\Ddl\Table::TYPE_SMALLINT,
             null,
             ['unsigned' => true, 'nullable' => false, 'default' => 1],
             'Is Default Profile',
         )
         ->addColumn(
             'column_config',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             '64k',
             ['nullable' => false],
             'Column Config JSON',
         )
         ->addColumn(
             'created_at',
-            Varien_Db_Ddl_Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
             null,
             [
                 'nullable' => false,
-                'default'  => Varien_Db_Ddl_Table::TIMESTAMP_INIT,
+                'default'  => \Maho\Db\Ddl\Table::TIMESTAMP_INIT,
             ],
             'Created At',
         )
         ->addColumn(
             'updated_at',
-            Varien_Db_Ddl_Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
             null,
             [
                 'nullable' => false,
-                'default'  => Varien_Db_Ddl_Table::TIMESTAMP_INIT_UPDATE,
+                'default'  => \Maho\Db\Ddl\Table::TIMESTAMP_INIT_UPDATE,
             ],
             'Updated At',
         )
@@ -144,14 +144,14 @@ if (!$connection->isTableExists($profileTable)) {
             'grid_id',
             $gridTable,
             'grid_id',
-            Varien_Db_Ddl_Table::ACTION_CASCADE,
+            \Maho\Db\Ddl\Table::ACTION_CASCADE,
         )
         ->addForeignKey(
             $installer->getFkName($profileTable, 'user_id', 'admin/user', 'user_id'),
             'user_id',
             $installer->getTable('admin/user'),
             'user_id',
-            Varien_Db_Ddl_Table::ACTION_CASCADE,
+            \Maho\Db\Ddl\Table::ACTION_CASCADE,
         )
         ->setComment('MageAustralia AdminGrid — User Profiles');
 
@@ -167,7 +167,7 @@ if (!$connection->isTableExists($columnTable)) {
         ->newTable($columnTable)
         ->addColumn(
             'column_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             [
                 'identity' => true,
@@ -179,56 +179,56 @@ if (!$connection->isTableExists($columnTable)) {
         )
         ->addColumn(
             'grid_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['unsigned' => true, 'nullable' => false],
             'Grid ID',
         )
         ->addColumn(
             'column_code',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             100,
             ['nullable' => false],
             'Column Code',
         )
         ->addColumn(
             'header',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             255,
             ['nullable' => false],
             'Column Header Label',
         )
         ->addColumn(
             'column_type',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             50,
             ['nullable' => false, 'default' => 'text'],
             'Column Type (text, options, image, date, number)',
         )
         ->addColumn(
             'source_type',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             50,
             ['nullable' => false],
             'Source Type (eav_attribute, computed, static)',
         )
         ->addColumn(
             'source_config',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             '16k',
             ['nullable' => true],
             'JSON Config for the Source',
         )
         ->addColumn(
             'sort_order',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['nullable' => false, 'default' => 0],
             'Sort Order',
         )
         ->addColumn(
             'is_active',
-            Varien_Db_Ddl_Table::TYPE_SMALLINT,
+            \Maho\Db\Ddl\Table::TYPE_SMALLINT,
             null,
             ['unsigned' => true, 'nullable' => false, 'default' => 1],
             'Is Active',
@@ -243,7 +243,7 @@ if (!$connection->isTableExists($columnTable)) {
             'grid_id',
             $gridTable,
             'grid_id',
-            Varien_Db_Ddl_Table::ACTION_CASCADE,
+            \Maho\Db\Ddl\Table::ACTION_CASCADE,
         )
         ->setComment('MageAustralia AdminGrid — Custom Column Definitions');
 
@@ -259,7 +259,7 @@ if (!$connection->isTableExists($optionsSourceTable)) {
         ->newTable($optionsSourceTable)
         ->addColumn(
             'source_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             [
                 'identity' => true,
@@ -271,28 +271,28 @@ if (!$connection->isTableExists($optionsSourceTable)) {
         )
         ->addColumn(
             'name',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             100,
             ['nullable' => false],
             'Source Name',
         )
         ->addColumn(
             'type',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             50,
             ['nullable' => false, 'default' => 'list'],
             'Source Type (list, model)',
         )
         ->addColumn(
             'model_class',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             255,
             ['nullable' => true],
             'Model Class Alias',
         )
         ->addColumn(
             'model_method',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             100,
             ['nullable' => true],
             'Model Method Name',
@@ -311,7 +311,7 @@ if (!$connection->isTableExists($optionsValueTable)) {
         ->newTable($optionsValueTable)
         ->addColumn(
             'value_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             [
                 'identity' => true,
@@ -323,28 +323,28 @@ if (!$connection->isTableExists($optionsValueTable)) {
         )
         ->addColumn(
             'source_id',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['unsigned' => true, 'nullable' => false],
             'Source ID',
         )
         ->addColumn(
             'option_value',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             255,
             ['nullable' => false],
             'Option Value',
         )
         ->addColumn(
             'option_label',
-            Varien_Db_Ddl_Table::TYPE_TEXT,
+            \Maho\Db\Ddl\Table::TYPE_TEXT,
             255,
             ['nullable' => false],
             'Option Label',
         )
         ->addColumn(
             'sort_order',
-            Varien_Db_Ddl_Table::TYPE_INTEGER,
+            \Maho\Db\Ddl\Table::TYPE_INTEGER,
             null,
             ['nullable' => false, 'default' => 0],
             'Sort Order',
@@ -354,7 +354,7 @@ if (!$connection->isTableExists($optionsValueTable)) {
             'source_id',
             $optionsSourceTable,
             'source_id',
-            Varien_Db_Ddl_Table::ACTION_CASCADE,
+            \Maho\Db\Ddl\Table::ACTION_CASCADE,
         )
         ->setComment('MageAustralia AdminGrid — Options Source Values');
 

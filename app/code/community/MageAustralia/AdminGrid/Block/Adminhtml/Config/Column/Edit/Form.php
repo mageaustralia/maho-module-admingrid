@@ -11,7 +11,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
             ? $column->getData('grid_id')
             : $this->getRequest()->getParam('grid_id');
 
-        $form = new Varien_Data_Form([
+        $form = new \Maho\Data\Form([
             'id'      => 'edit_form',
             'action'  => $this->getUrl('*/*/saveColumn'),
             'method'  => 'post',

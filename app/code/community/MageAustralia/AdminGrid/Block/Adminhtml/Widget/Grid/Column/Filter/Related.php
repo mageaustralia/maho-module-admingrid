@@ -6,9 +6,9 @@ declare(strict_types=1);
  * Custom filter for related table columns.
  * Applies EXISTS subquery directly to the collection select.
  */
-class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Related
-    extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Text
+class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Related extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Text
 {
+    #[\Override]
     public function getCondition(): ?array
     {
         $value = $this->getValue();

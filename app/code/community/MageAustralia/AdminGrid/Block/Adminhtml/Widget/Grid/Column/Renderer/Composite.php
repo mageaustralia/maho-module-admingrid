@@ -14,10 +14,10 @@ declare(strict_types=1);
  * - 'multi_row': boolean — if true, data is array of arrays (e.g. order items)
  * - 'item_separator': 'hr' (default) or 'br' or 'none'
  */
-class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Composite
-    extends Mage_Adminhtml_Block_Widget_Grid_Column_Renderer_Abstract
+class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Composite extends Mage_Adminhtml_Block_Widget_Grid_Column_Renderer_Abstract
 {
-    public function render(Varien_Object $row): string
+    #[\Override]
+    public function render(\Maho\DataObject $row): string
     {
         $colIndex = $this->getColumn()->getIndex();
         $data = $row->getData($colIndex);
@@ -95,8 +95,10 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
 
             $rendered = $template
                 ? $this->applyTemplate($rowData, $template, $separator)
-                : implode($separator, array_map('htmlspecialchars',
-                    array_filter($rowData, fn($v) => $v !== null && $v !== '' && !str_starts_with((string) $v, '_'))));
+                : implode($separator, array_map(
+                    'htmlspecialchars',
+                    array_filter($rowData, fn($v) => $v !== null && $v !== '' && !str_starts_with((string) $v, '_')),
+                ));
 
             if ($rendered || $thumbHtml) {
                 if ($thumbHtml) {

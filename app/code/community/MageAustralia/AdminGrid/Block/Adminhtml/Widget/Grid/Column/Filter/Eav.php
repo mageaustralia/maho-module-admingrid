@@ -7,13 +7,13 @@ declare(strict_types=1);
  * Applies EXISTS subquery directly to the collection select,
  * bypassing addFieldToFilter (which can't handle Expr filter_index).
  */
-class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav
-    extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Select
+class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Select
 {
     /**
      * Return null to prevent the grid from calling addFieldToFilter.
      * Instead, we apply the filter directly in getCondition via the collection.
      */
+    #[\Override]
     public function getCondition(): ?array
     {
         $value = $this->getValue();
@@ -49,17 +49,17 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav
 
         $backendType = $attribute->getBackendType();
         if (in_array($backendType, ['int', 'decimal']) || $attribute->usesSource()) {
-            $valueCond = "_eav.value = " . $conn->quote($value);
+            $valueCond = '_eav.value = ' . $conn->quote($value);
         } else {
-            $valueCond = "_eav.value LIKE " . $conn->quote('%' . $value . '%');
+            $valueCond = '_eav.value LIKE ' . $conn->quote('%' . $value . '%');
         }
 
         $storeClause = $conn->tableColumnExists($backendTable, 'store_id')
-            ? " AND _eav.store_id = 0"
-            : "";
+            ? ' AND _eav.store_id = 0'
+            : '';
 
         $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
-            . " WHERE _eav.entity_id = e.entity_id"
+            . ' WHERE _eav.entity_id = e.entity_id'
             . " AND _eav.attribute_id = {$attrId}"
             . $storeClause
             . " AND {$valueCond}";

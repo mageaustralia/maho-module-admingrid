@@ -16,7 +16,7 @@ class MageAustralia_AdminGrid_Model_Observer
      *
      * Event: admingrid_prepare_columns_after
      */
-    public function onGridPrepareColumnsAfter(Varien_Event_Observer $observer): void
+    public function onGridPrepareColumnsAfter(\Maho\Event\Observer $observer): void
     {
         try {
             $this->_doGridPrepareColumnsAfter($observer);
@@ -25,7 +25,7 @@ class MageAustralia_AdminGrid_Model_Observer
         }
     }
 
-    private function _doGridPrepareColumnsAfter(Varien_Event_Observer $observer): void
+    private function _doGridPrepareColumnsAfter(\Maho\Event\Observer $observer): void
     {
         /** @var Mage_Adminhtml_Block_Widget_Grid $grid */
         $grid = $observer->getEvent()->getGrid();
@@ -40,7 +40,7 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        $userId = Mage::getSingleton('admin/session')->getUser()?->getId();
+        $userId = Mage::getSingleton('admin/session')->getUser()->getId();
         if (!$userId) {
             return;
         }
@@ -86,8 +86,11 @@ class MageAustralia_AdminGrid_Model_Observer
         MageAustralia_AdminGrid_Model_Grid $gridModel,
     ): array {
         $customColumns = Mage::getModel('mageaustralia_admingrid/column')
-            ->getCollection()
-            ->addActiveGridFilter((int) $gridModel->getId());
+            ->getCollection();
+        if ($customColumns === false) {
+            return [];
+        }
+        $customColumns->addActiveGridFilter((int) $gridModel->getId());
 
         if ($customColumns->getSize() === 0) {
             return [];
@@ -288,14 +291,14 @@ class MageAustralia_AdminGrid_Model_Observer
      * Build a correlated subquery expression for sorting by an EAV attribute.
      * This avoids adding a JOIN to the main query while still enabling ORDER BY.
      *
-     * Returns a Zend_Db_Expr like: (SELECT value FROM catalog_product_entity_varchar
+     * Returns a DB expression like: (SELECT value FROM catalog_product_entity_varchar
      *   WHERE entity_id = e.entity_id AND attribute_id = 119 AND store_id = 0)
      */
     /**
      * Filter callback for EAV custom columns.
      * Adds a WHERE EXISTS subquery — no JOIN on the main collection.
      */
-    public function filterEavColumn(Varien_Data_Collection_Db $collection, $column): void
+    public function filterEavColumn(\Maho\Data\Collection\Db $collection, \Maho\DataObject $column): void
     {
         $value = $column->getFilter()->getValue();
         if ($value === null || $value === '') {
@@ -327,33 +330,33 @@ class MageAustralia_AdminGrid_Model_Observer
             // Range filter (from/to) for number/date types
             if (!empty($value['from'])) {
                 $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
-                    . " WHERE _eav.entity_id = e.entity_id"
+                    . ' WHERE _eav.entity_id = e.entity_id'
                     . " AND _eav.attribute_id = {$attrId}"
-                    . " AND _eav.store_id = 0"
-                    . " AND _eav.value >= " . $conn->quote($value['from']);
+                    . ' AND _eav.store_id = 0'
+                    . ' AND _eav.value >= ' . $conn->quote($value['from']);
                 $collection->getSelect()->where("EXISTS ({$subquery})");
             }
             if (!empty($value['to'])) {
                 $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
-                    . " WHERE _eav.entity_id = e.entity_id"
+                    . ' WHERE _eav.entity_id = e.entity_id'
                     . " AND _eav.attribute_id = {$attrId}"
-                    . " AND _eav.store_id = 0"
-                    . " AND _eav.value <= " . $conn->quote($value['to']);
+                    . ' AND _eav.store_id = 0'
+                    . ' AND _eav.value <= ' . $conn->quote($value['to']);
                 $collection->getSelect()->where("EXISTS ({$subquery})");
             }
         } else {
             // Exact match (options/select) or LIKE (text)
             $backendType = $attribute->getBackendType();
             if (in_array($backendType, ['int', 'decimal']) || $attribute->usesSource()) {
-                $valueCond = "_eav.value = " . $conn->quote($value);
+                $valueCond = '_eav.value = ' . $conn->quote($value);
             } else {
-                $valueCond = "_eav.value LIKE " . $conn->quote('%' . $value . '%');
+                $valueCond = '_eav.value LIKE ' . $conn->quote('%' . $value . '%');
             }
 
             $subquery = "SELECT 1 FROM {$backendTable} AS _eav"
-                . " WHERE _eav.entity_id = e.entity_id"
+                . ' WHERE _eav.entity_id = e.entity_id'
                 . " AND _eav.attribute_id = {$attrId}"
-                . " AND _eav.store_id = 0"
+                . ' AND _eav.store_id = 0'
                 . " AND {$valueCond}";
             $collection->getSelect()->where("EXISTS ({$subquery})");
         }
@@ -362,7 +365,7 @@ class MageAustralia_AdminGrid_Model_Observer
     /**
      * Build correlated subquery for sorting/filtering by a related table column.
      */
-    private function buildRelatedSortExpression(MageAustralia_AdminGrid_Model_Column $customCol)
+    private function buildRelatedSortExpression(MageAustralia_AdminGrid_Model_Column $customCol): \Maho\Db\Expr|null
     {
         $sourceConfig = $customCol->getSourceConfig();
         $colName = $sourceConfig['column_name'] ?? null;
@@ -387,13 +390,14 @@ class MageAustralia_AdminGrid_Model_Observer
         return new Maho\Db\Expr(
             "(SELECT {$colName} FROM {$table}"
             . " WHERE {$remoteCol} = main_table.{$localCol}"
-            . " LIMIT 1)"
+            . ' LIMIT 1)',
         );
     }
 
     /**
      * @return Maho\Db\Expr|null
      */
+    /** @phpstan-ignore method.unused */
     private function buildEavSortExpression(MageAustralia_AdminGrid_Model_Column $customCol)
     {
         $sourceConfig = $customCol->getSourceConfig();
@@ -415,15 +419,15 @@ class MageAustralia_AdminGrid_Model_Observer
         // Check if backend table has store_id (catalog does, customer doesn't)
         $read = Mage::getSingleton('core/resource')->getConnection('core_read');
         $storeClause = $read->tableColumnExists($backendTable, 'store_id')
-            ? " AND store_id = 0"
-            : "";
+            ? ' AND store_id = 0'
+            : '';
 
         return new Maho\Db\Expr(
             "(SELECT value FROM {$backendTable}"
-            . " WHERE entity_id = e.entity_id"
+            . ' WHERE entity_id = e.entity_id'
             . " AND attribute_id = {$attrId}"
             . $storeClause
-            . " LIMIT 1)"
+            . ' LIMIT 1)',
         );
     }
 
@@ -432,7 +436,7 @@ class MageAustralia_AdminGrid_Model_Observer
      *
      * Event: admingrid_collection_load_after
      */
-    public function onCollectionLoadAfter(Varien_Event_Observer $observer): void
+    public function onCollectionLoadAfter(\Maho\Event\Observer $observer): void
     {
         $grid = $observer->getEvent()->getGrid();
         $collection = $observer->getEvent()->getCollection();
@@ -478,7 +482,8 @@ class MageAustralia_AdminGrid_Model_Observer
      * Apply LEFT JOINs for related-table columns.
      * Each join is deduplicated by alias.
      */
-    private function applyRelatedJoins(Varien_Data_Collection_Db $collection, array $joins): void
+    /** @phpstan-ignore method.unused */
+    private function applyRelatedJoins(\Maho\Data\Collection\Db $collection, array $joins): void
     {
         $resource = Mage::getSingleton('core/resource');
 
@@ -522,7 +527,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * Batch-fetches values for visible rows from a related table (e.g. order data for invoices).
      */
     private function hydrateRelatedColumn(
-        Varien_Data_Collection_Db $collection,
+        \Maho\Data\Collection\Db $collection,
         MageAustralia_AdminGrid_Model_Column $customCol,
     ): void {
         $sourceConfig = $customCol->getSourceConfig();
@@ -581,7 +586,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * Fetches multiple fields from a related table and injects as an array.
      */
     private function hydrateCompositeColumn(
-        Varien_Data_Collection_Db $collection,
+        \Maho\Data\Collection\Db $collection,
         MageAustralia_AdminGrid_Model_Column $customCol,
     ): void {
         $sourceConfig = $customCol->getSourceConfig();
@@ -705,7 +710,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * Zero JOINs on the main collection — batch fetch for 20-ish rows only.
      */
     private function hydrateEavColumn(
-        Varien_Data_Collection_Db $collection,
+        \Maho\Data\Collection\Db $collection,
         MageAustralia_AdminGrid_Model_Column $customCol,
     ): void {
         $sourceConfig = $customCol->getSourceConfig();
@@ -879,7 +884,7 @@ class MageAustralia_AdminGrid_Model_Observer
      * Batch-fetches category names for visible products from catalog_category_product.
      */
     private function hydrateCategoryColumn(
-        Varien_Data_Collection_Db $collection,
+        \Maho\Data\Collection\Db $collection,
         MageAustralia_AdminGrid_Model_Column $customCol,
     ): void {
         $entityIds = [];
@@ -950,6 +955,7 @@ class MageAustralia_AdminGrid_Model_Observer
         $attrId = (int) $attr->getId();
         if (!isset(self::$_optionsCache[$attrId])) {
             $options = [];
+            /** @phpstan-ignore arguments.count */
             foreach ($attr->getSource()->getAllOptions(false) as $opt) {
                 $options[$opt['value']] = $opt['label'];
             }

@@ -113,10 +113,8 @@
 
             try {
                 const sep = loadUrl.includes('?') ? '&' : '?';
-                const url = `${loadUrl}${sep}grid_block_id=${encodeURIComponent(this.gridBlockId)}&isAjax=true`;
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                if (!resp.ok) return;
-                const data = await resp.json();
+                const url = `${loadUrl}${sep}grid_block_id=${encodeURIComponent(this.gridBlockId)}`;
+                const data = await mahoFetch(url, { loaderArea: false });
                 if (data.ajaxExpired || data.error) return;
 
                 this.gridId = data.gridId;
@@ -138,16 +136,8 @@
             const url = this.getConfigUrl(actionKey);
             if (!url) throw new Error(`AdminGrid: no URL for ${actionKey}`);
 
-            params.form_key = typeof FORM_KEY !== 'undefined' ? FORM_KEY : '';
-            params.isAjax = 'true';
-
-            const resp = await fetch(url, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams(params).toString(),
-            });
-            const data = await resp.json();
+            const body = new URLSearchParams(params);
+            const data = await mahoFetch(url, { method: 'POST', body, loaderArea: false });
             if (data.ajaxExpired) {
                 location.reload();
                 throw new Error('Session expired');
@@ -466,9 +456,8 @@
             let config;
             try {
                 const url = this.getConfigUrl('getColumnConfig')
-                    + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}&column_code=${encodeURIComponent(code)}&isAjax=true`;
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                const data = await resp.json();
+                    + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}&column_code=${encodeURIComponent(code)}`;
+                const data = await mahoFetch(url, { loaderArea: false });
                 if (data.error) return;
                 config = data.config || {};
             } catch { return; }
@@ -798,10 +787,8 @@
         async loadAvailableColumns(container) {
             try {
                 const url = this.getConfigUrl('availableColumns')
-                    + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}&isAjax=true`;
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                if (!resp.ok) return;
-                const data = await resp.json();
+                    + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}`;
+                const data = await mahoFetch(url, { loaderArea: false });
                 if (!data.available || data.available.length === 0) return;
 
                 // Split into groups
@@ -1191,20 +1178,12 @@
     }
 
     // Init
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', discoverGrids);
-    } else {
+    mahoOnReady(() => {
         discoverGrids();
-    }
-
-    // Watch for dynamically added grids (tabs, AJAX)
-    const watchBody = () => {
+        // Watch for dynamically added grids (tabs, AJAX)
         new MutationObserver(() => discoverGrids())
             .observe(document.body, { childList: true, subtree: true });
-    };
-
-    if (document.body) watchBody();
-    else document.addEventListener('DOMContentLoaded', watchBody);
+    });
 })();
 
 // ── Category Tree Filter Popup ──────────────────────────────────────
@@ -1219,10 +1198,9 @@ window.AdminGridCategoryFilter = (() => {
         _targetId = hiddenInputId;
 
         if (!_treeCache) {
-            const url = (window.ADMINGRID_CONFIG?.urls?.categoryTree || '') + '?isAjax=true';
+            const url = window.ADMINGRID_CONFIG?.urls?.categoryTree || '';
             try {
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                const data = await resp.json();
+                const data = await mahoFetch(url, { loaderArea: false });
                 _treeCache = data.tree || [];
             } catch (e) {
                 console.error('AdminGrid: failed to load category tree', e);
