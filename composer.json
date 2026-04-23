@@ -1,0 +1,28 @@
+{
+    "name": "mageaustralia/maho-module-admingrid",
+    "description": "Enhanced admin grids for Maho — column visibility, drag-to-reorder, saved profiles, auto-discovered EAV attributes, and cross-table columns",
+    "type": "maho-module",
+    "license": "OSL-3.0",
+    "homepage": "https://github.com/mageaustralia/maho-module-admingrid",
+    "authors": [
+        {
+            "name": "Mage Australia",
+            "email": "dev@mageaustralia.com.au",
+            "homepage": "https://mageaustralia.com.au"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "mahocommerce/maho": ">=26.3"
+    },
+    "autoload": {
+        "psr-0": {
+            "MageAustralia_AdminGrid_": "app/code/community/"
+        }
+    },
+    "extra": {
+        "map": [
+        ["app/code/community/MageAustralia/AdminGrid", "app/code/community/MageAustralia/AdminGrid"],["app/etc/modules/MageAustralia_AdminGrid.xml", "app/etc/modules/MageAustralia_AdminGrid.xml"],["app/design/adminhtml/default/default", "app/design/adminhtml/default/default"],["app/locale/en_US/MageAustralia_AdminGrid.csv", "app/locale/en_US/MageAustralia_AdminGrid.csv"],["skin/adminhtml/default/default", "skin/adminhtml/default/default"]
+        ]
+    }
+}

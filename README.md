@@ -1,5 +1,8 @@
 # MageAustralia AdminGrid
 
+[![CI](https://github.com/mageaustralia/maho-module-admingrid/actions/workflows/ci.yml/badge.svg)](https://github.com/mageaustralia/maho-module-admingrid/actions/workflows/ci.yml)
+[![License: OSL-3.0](https://img.shields.io/badge/license-OSL--3.0-blue.svg)](LICENSE)
+
 Enhanced admin grids for [Maho](https://github.com/mahocommerce/maho) — column visibility, drag-to-reorder, saved profiles, auto-discovered EAV attributes, and cross-table columns. Zero-JOIN architecture safe for large catalogs and high-volume order tables.
 
 Inspired by [BL_CustomGrid](https://github.com/mage-eag/mage-enhanced-admin-grids) by Benoit Leulliette. Built from scratch for Maho with vanilla JS (no Prototype.js dependency).
