@@ -51,6 +51,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Grid registry list.
      */
+    #[\Maho\Config\Route('/admin/admingrid/index')]
     public function indexAction(): void
     {
         $this->loadLayout();
@@ -62,6 +63,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Custom columns list for a specific grid.
      */
+    #[\Maho\Config\Route('/admin/admingrid/columns')]
     public function columnsAction(): void
     {
         $gridId = (int) $this->getRequest()->getParam('grid_id');
@@ -81,6 +83,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * New custom column form.
      */
+    #[\Maho\Config\Route('/admin/admingrid/newColumn')]
     public function newColumnAction(): void
     {
         $this->_forward('editColumn');
@@ -89,6 +92,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Edit custom column form.
      */
+    #[\Maho\Config\Route('/admin/admingrid/editColumn')]
     public function editColumnAction(): void
     {
         $columnId = (int) $this->getRequest()->getParam('column_id');
@@ -116,6 +120,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Save custom column.
      */
+    #[\Maho\Config\Route('/admin/admingrid/saveColumn')]
     public function saveColumnAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -167,6 +172,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * Delete custom column.
      */
+    #[\Maho\Config\Route('/admin/admingrid/deleteColumn')]
     public function deleteColumnAction(): void
     {
         $columnId = (int) $this->getRequest()->getParam('column_id');
@@ -196,6 +202,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * GET: Load profile data + column definitions for a grid.
      */
+    #[\Maho\Config\Route('/admin/admingrid/load')]
     public function loadAction(): void
     {
         $gridBlockId = $this->getRequest()->getParam('grid_block_id');
@@ -252,6 +259,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Save profile (create or update).
      */
+    #[\Maho\Config\Route('/admin/admingrid/saveProfile')]
     public function saveProfileAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -316,6 +324,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Delete a profile.
      */
+    #[\Maho\Config\Route('/admin/admingrid/deleteProfile')]
     public function deleteProfileAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -349,6 +358,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Set a profile as default (active).
      */
+    #[\Maho\Config\Route('/admin/admingrid/setDefault')]
     public function setDefaultAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -380,6 +390,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
      * GET: Return available (not-yet-added) attributes for a grid.
      * The JS uses this to populate the "Add Column" section of the dropdown.
      */
+    #[\Maho\Config\Route('/admin/admingrid/availableColumns')]
     public function availableColumnsAction(): void
     {
         $gridBlockId = $this->getRequest()->getParam('grid_block_id');
@@ -488,6 +499,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
      * POST: Quick-add an attribute as a custom column from the JS dropdown.
      * No admin config page needed — creates the column record automatically.
      */
+    #[\Maho\Config\Route('/admin/admingrid/addColumn')]
     public function addColumnAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -585,6 +597,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Rename a custom column's header.
      */
+    #[\Maho\Config\Route('/admin/admingrid/renameColumn')]
     public function renameColumnAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -630,6 +643,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Remove a custom column by code + grid_block_id.
      */
+    #[\Maho\Config\Route('/admin/admingrid/removeColumn')]
     public function removeColumnAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -674,6 +688,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * GET: Get a custom column's full source_config (for the composite config panel).
      */
+    #[\Maho\Config\Route('/admin/admingrid/getColumnConfig')]
     public function getColumnConfigAction(): void
     {
         $gridBlockId = $this->getRequest()->getParam('grid_block_id');
@@ -721,6 +736,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * POST: Update a custom column's source_config (from the composite config panel).
      */
+    #[\Maho\Config\Route('/admin/admingrid/updateColumnConfig')]
     public function updateColumnConfigAction(): void
     {
         if (!$this->getRequest()->isPost()) {
@@ -772,6 +788,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     /**
      * GET: Return category tree as JSON for the category filter popup.
      */
+    #[\Maho\Config\Route('/admin/admingrid/categoryTree')]
     public function categoryTreeAction(): void
     {
         $collection = Mage::getModel('catalog/category')->getCollection()
