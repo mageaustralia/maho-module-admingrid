@@ -775,25 +775,38 @@ class MageAustralia_AdminGrid_Model_Observer
             return [];
         }
 
-        $resource = Mage::getSingleton('core/resource');
-        $read = $resource->getConnection('core_read');
+        $rows = [];
 
-        $backendTable = $attribute->getBackendTable();
-        if (!$backendTable) {
-            return [];
+        if ($entityType === 'catalog_product') {
+            $collection = Mage::getResourceModel('catalog/product_collection')
+                ->addAttributeToSelect($attributeCode)
+                ->addFieldToFilter('entity_id', ['in' => $entityIds]);
+            foreach ($collection as $product) {
+                $rows[(int) $product->getId()] = $product->getData($attributeCode);
+            }
+        } else {
+            // Non-catalog entity types (e.g. customer) — no canonical collection wrapper
+            // for arbitrary entity types, so direct EAV read remains.
+            $resource = Mage::getSingleton('core/resource');
+            $read = $resource->getConnection('core_read');
+
+            $backendTable = $attribute->getBackendTable();
+            if (!$backendTable) {
+                return [];
+            }
+
+            $select = $read->select()
+                ->from($backendTable, ['entity_id', 'value'])
+                ->where('attribute_id = ?', $attribute->getId())
+                ->where('entity_id IN (?)', $entityIds);
+
+            // Only catalog entities have store_id scoping; customer entities don't
+            if ($read->tableColumnExists($backendTable, 'store_id')) {
+                $select->where('store_id = ?', 0);
+            }
+
+            $rows = $read->fetchPairs($select);
         }
-
-        $select = $read->select()
-            ->from($backendTable, ['entity_id', 'value'])
-            ->where('attribute_id = ?', $attribute->getId())
-            ->where('entity_id IN (?)', $entityIds);
-
-        // Only catalog entities have store_id scoping; customer entities don't
-        if ($read->tableColumnExists($backendTable, 'store_id')) {
-            $select->where('store_id = ?', 0);
-        }
-
-        $rows = $read->fetchPairs($select);
 
         // Resolve option labels for select/multiselect attributes
         if ($attribute->usesSource()) {
@@ -917,6 +930,9 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
+        // catalog_category_product is the FK pivot (product_id, category_id, position).
+        // There is no canonical collection wrapper for this join table, so a raw select
+        // remains, but the table name resolves through the resource model.
         $resource = Mage::getSingleton('core/resource');
         $read = $resource->getConnection('core_read');
         $ccpTable = $resource->getTableName('catalog/category_product');
@@ -931,17 +947,14 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        // Batch-fetch category names via EAV
-        $nameAttr = Mage::getSingleton('eav/config')
-            ->getAttribute('catalog_category', 'name');
-        $nameTable = $nameAttr->getBackendTable();
-
-        $nameSelect = $read->select()
-            ->from($nameTable, ['entity_id', 'value'])
-            ->where('attribute_id = ?', (int) $nameAttr->getId())
-            ->where('entity_id IN (?)', $catIds)
-            ->where('store_id = ?', 0);
-        $catNames = $read->fetchPairs($nameSelect);
+        // Batch-fetch category names via category collection
+        $catColl = Mage::getResourceModel('catalog/category_collection')
+            ->addAttributeToSelect('name')
+            ->addFieldToFilter('entity_id', ['in' => $catIds]);
+        $catNames = [];
+        foreach ($catColl as $cat) {
+            $catNames[(int) $cat->getId()] = (string) $cat->getName();
+        }
 
         // Group by product_id
         $productCats = [];
@@ -990,29 +1003,17 @@ class MageAustralia_AdminGrid_Model_Observer
      */
     private function fetchProductThumbnails(array $productIds): array
     {
-        $resource = Mage::getSingleton('core/resource');
-        $read = $resource->getConnection('core_read');
-
-        $thumbnailAttr = Mage::getSingleton('eav/config')
-            ->getAttribute('catalog_product', 'thumbnail');
-
-        if (!$thumbnailAttr || !$thumbnailAttr->getId()) {
-            return [];
-        }
-
-        $select = $read->select()
-            ->from($thumbnailAttr->getBackendTable(), ['entity_id', 'value'])
-            ->where('attribute_id = ?', $thumbnailAttr->getId())
-            ->where('entity_id IN (?)', $productIds)
-            ->where('store_id = ?', 0);
-
-        $rows = $read->fetchPairs($select);
         $mediaUrl = Mage::getBaseUrl(Mage_Core_Model_Store::URL_TYPE_MEDIA) . 'catalog/product';
 
+        $coll = Mage::getResourceModel('catalog/product_collection')
+            ->addAttributeToSelect('thumbnail')
+            ->addFieldToFilter('entity_id', ['in' => $productIds]);
+
         $result = [];
-        foreach ($rows as $entityId => $value) {
+        foreach ($coll as $product) {
+            $value = $product->getData('thumbnail');
             if ($value && $value !== 'no_selection') {
-                $result[(int) $entityId] = $mediaUrl . $value;
+                $result[(int) $product->getId()] = $mediaUrl . $value;
             }
         }
 
@@ -1021,23 +1022,31 @@ class MageAustralia_AdminGrid_Model_Observer
 
         // Fallback: for products without thumbnails, check configurable parent
         if ($missingIds !== []) {
-            $superLink = $resource->getTableName('catalog/product_super_link');
-            $parentSelect = $read->select()
-                ->from($superLink, ['product_id', 'parent_id'])
-                ->where('product_id IN (?)', $missingIds);
-            $parentMap = $read->fetchPairs($parentSelect);
+            $parentMap = Mage::getResourceSingleton('catalog/product_type_configurable')
+                ->getParentIdsByChild($missingIds);
 
-            if (!empty($parentMap)) {
-                $parentIds = array_unique(array_values($parentMap));
-                $parentSelect = $read->select()
-                    ->from($thumbnailAttr->getBackendTable(), ['entity_id', 'value'])
-                    ->where('attribute_id = ?', $thumbnailAttr->getId())
-                    ->where('entity_id IN (?)', $parentIds)
-                    ->where('store_id = ?', 0);
-                $parentRows = $read->fetchPairs($parentSelect);
+            // getParentIdsByChild() returns childId => [parentId, ...]; flatten to first parent
+            $childToParent = [];
+            $allParentIds = [];
+            foreach ($parentMap as $childId => $parents) {
+                if (!empty($parents)) {
+                    $childToParent[(int) $childId] = (int) $parents[0];
+                    $allParentIds[] = (int) $parents[0];
+                }
+            }
 
-                foreach ($parentMap as $childId => $parentId) {
-                    $parentVal = $parentRows[$parentId] ?? null;
+            if ($allParentIds !== []) {
+                $parentIds = array_unique($allParentIds);
+                $parentColl = Mage::getResourceModel('catalog/product_collection')
+                    ->addAttributeToSelect('thumbnail')
+                    ->addFieldToFilter('entity_id', ['in' => $parentIds]);
+                $parentThumbs = [];
+                foreach ($parentColl as $parent) {
+                    $parentThumbs[(int) $parent->getId()] = $parent->getData('thumbnail');
+                }
+
+                foreach ($childToParent as $childId => $parentId) {
+                    $parentVal = $parentThumbs[$parentId] ?? null;
                     if ($parentVal && $parentVal !== 'no_selection') {
                         $result[$childId] = $mediaUrl . $parentVal;
                     }
