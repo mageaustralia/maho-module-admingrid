@@ -28,7 +28,9 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Renderer_Compos
 
         $config = $this->getColumn()->getData('admingrid_source_config') ?: [];
         $template = $config['template'] ?? null;
-        $separator = $config['separator'] ?? ' ';
+        // Escape once here: the separator is admin-supplied config and is used as
+        // raw join glue between already-escaped field values downstream.
+        $separator = htmlspecialchars((string) ($config['separator'] ?? ' '));
         $multiRow = $config['multi_row'] ?? false;
         $style = $config['style'] ?? 'plain';
         $customCss = $config['custom_css'] ?? '';

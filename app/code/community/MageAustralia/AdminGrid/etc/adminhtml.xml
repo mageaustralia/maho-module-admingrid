@@ -20,6 +20,13 @@
                             <mageaustralia_admingrid translate="title">
                                 <title>Admin Grid Profiles</title>
                             </mageaustralia_admingrid>
+                            <config>
+                                <children>
+                                    <mageaustralia_admingrid translate="title">
+                                        <title>Admin Grid</title>
+                                    </mageaustralia_admingrid>
+                                </children>
+                            </config>
                         </children>
                     </system>
                 </children>

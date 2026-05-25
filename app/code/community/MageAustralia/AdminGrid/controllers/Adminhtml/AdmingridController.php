@@ -147,6 +147,30 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             }
         }
 
+        // Validate identifiers and source_config against the grid's discovered schema
+        // (primary SQL-injection guard for custom columns).
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $columnCode = (string) ($data['column_code'] ?? '');
+        $sourceType = (string) ($data['source_type'] ?? 'static');
+        $grid = Mage::getModel('mageaustralia_admingrid/grid')->load($gridId);
+
+        if (($columnCode !== '' && !$helper->isSafeIdentifier($columnCode)) || !$grid->getId()) {
+            $this->_getSession()->addError($this->__('Invalid column configuration.'));
+            $this->_redirectReferer();
+            return;
+        }
+
+        $configArray = !empty($data['source_config'])
+            ? (array) json_decode((string) $data['source_config'], true)
+            : [];
+        $configError = $helper->validateSourceConfig((string) $grid->getData('grid_block_id'), $sourceType, $configArray);
+        if ($configError !== null) {
+            Mage::log('AdminGrid rejected column config (saveColumn): ' . $configError);
+            $this->_getSession()->addError($this->__('Invalid column configuration.'));
+            $this->_redirectReferer();
+            return;
+        }
+
         $column->addData([
             'grid_id'       => $gridId,
             'column_code'   => $data['column_code'] ?? '',
@@ -262,8 +286,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/saveProfile')]
     public function saveProfileAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -327,8 +350,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/deleteProfile')]
     public function deleteProfileAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -361,8 +383,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/setDefault')]
     public function setDefaultAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -472,8 +493,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         }
 
         // Category column (product grids only)
-        $helper2 = Mage::helper('mageaustralia_admingrid');
-        if ($helper2->isProductGrid($gridBlockId) && !in_array('categories', $existingCodes)) {
+        if ($helper->isProductGrid($gridBlockId) && !in_array('categories', $existingCodes)) {
             $hasCatCol = false;
             if ($grid->getId()) {
                 $catCheck = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
@@ -502,8 +522,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/addColumn')]
     public function addColumnAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -519,9 +538,8 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $grid = Mage::getModel('mageaustralia_admingrid/grid');
-        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
-        if (!$grid->getId()) {
+        $grid = $this->_loadGridByBlockId($gridBlockId);
+        if (!$grid) {
             $this->_sendJson(['error' => 'Grid not registered yet'], 404);
             return;
         }
@@ -569,6 +587,15 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             ]);
         }
 
+        $decodedConfig = (array) json_decode((string) $sourceConfig, true);
+        $configError = Mage::helper('mageaustralia_admingrid')
+            ->validateSourceConfig($gridBlockId, $sourceType, $decodedConfig);
+        if ($configError !== null) {
+            Mage::log('AdminGrid rejected column config (addColumn): ' . $configError);
+            $this->_sendJson(['error' => 'Invalid column configuration'], 400);
+            return;
+        }
+
         $column = Mage::getModel('mageaustralia_admingrid/column');
         $column->setData([
             'grid_id'       => $grid->getId(),
@@ -600,8 +627,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/renameColumn')]
     public function renameColumnAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -614,19 +640,14 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $grid = Mage::getModel('mageaustralia_admingrid/grid');
-        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
-        if (!$grid->getId()) {
+        $grid = $this->_loadGridByBlockId($gridBlockId);
+        if (!$grid) {
             $this->_sendJson(['error' => 'Grid not found'], 404);
             return;
         }
 
-        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
-            ->addFieldToFilter('grid_id', $grid->getId())
-            ->addFieldToFilter('column_code', $columnCode)
-            ->getFirstItem();
-
-        if (!$column->getId()) {
+        $column = $this->_loadColumnByCode((int) $grid->getId(), (string) $columnCode);
+        if (!$column) {
             $this->_sendJson(['error' => 'Column not found'], 404);
             return;
         }
@@ -646,8 +667,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/removeColumn')]
     public function removeColumnAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -659,19 +679,14 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $grid = Mage::getModel('mageaustralia_admingrid/grid');
-        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
-        if (!$grid->getId()) {
+        $grid = $this->_loadGridByBlockId($gridBlockId);
+        if (!$grid) {
             $this->_sendJson(['error' => 'Grid not found'], 404);
             return;
         }
 
-        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
-            ->addFieldToFilter('grid_id', $grid->getId())
-            ->addFieldToFilter('column_code', $columnCode)
-            ->getFirstItem();
-
-        if (!$column->getId()) {
+        $column = $this->_loadColumnByCode((int) $grid->getId(), (string) $columnCode);
+        if (!$column) {
             $this->_sendJson(['error' => 'Column not found'], 404);
             return;
         }
@@ -699,19 +714,14 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $grid = Mage::getModel('mageaustralia_admingrid/grid');
-        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
-        if (!$grid->getId()) {
+        $grid = $this->_loadGridByBlockId($gridBlockId);
+        if (!$grid) {
             $this->_sendJson(['error' => 'Grid not found'], 404);
             return;
         }
 
-        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
-            ->addFieldToFilter('grid_id', $grid->getId())
-            ->addFieldToFilter('column_code', $columnCode)
-            ->getFirstItem();
-
-        if (!$column->getId()) {
+        $column = $this->_loadColumnByCode((int) $grid->getId(), (string) $columnCode);
+        if (!$column) {
             $this->_sendJson(['error' => 'Column not found'], 404);
             return;
         }
@@ -739,8 +749,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Maho\Config\Route('/admin/admingrid/updateColumnConfig')]
     public function updateColumnConfigAction(): void
     {
-        if (!$this->getRequest()->isPost()) {
-            $this->_sendJson(['error' => 'POST required'], 405);
+        if (!$this->_requirePost()) {
             return;
         }
 
@@ -759,20 +768,24 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             return;
         }
 
-        $grid = Mage::getModel('mageaustralia_admingrid/grid');
-        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
-        if (!$grid->getId()) {
+        $grid = $this->_loadGridByBlockId($gridBlockId);
+        if (!$grid) {
             $this->_sendJson(['error' => 'Grid not found'], 404);
             return;
         }
 
-        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
-            ->addFieldToFilter('grid_id', $grid->getId())
-            ->addFieldToFilter('column_code', $columnCode)
-            ->getFirstItem();
-
-        if (!$column->getId()) {
+        $column = $this->_loadColumnByCode((int) $grid->getId(), (string) $columnCode);
+        if (!$column) {
             $this->_sendJson(['error' => 'Column not found'], 404);
+            return;
+        }
+
+        // Validate the new config against the grid's discovered schema (SQL-injection guard).
+        $configError = Mage::helper('mageaustralia_admingrid')
+            ->validateSourceConfig($gridBlockId, (string) $column->getData('source_type'), $decoded);
+        if ($configError !== null) {
+            Mage::log('AdminGrid rejected column config (updateColumnConfig): ' . $configError);
+            $this->_sendJson(['error' => 'Invalid column configuration'], 400);
             return;
         }
 
@@ -834,11 +847,42 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         ];
     }
 
+    private function _requirePost(): bool
+    {
+        if (!$this->getRequest()->isPost()) {
+            $this->_sendJson(['error' => 'POST required'], 405);
+            return false;
+        }
+
+        return true;
+    }
+
+    private function _loadGridByBlockId(string $gridBlockId): ?MageAustralia_AdminGrid_Model_Grid
+    {
+        /** @var MageAustralia_AdminGrid_Model_Grid $grid */
+        $grid = Mage::getModel('mageaustralia_admingrid/grid');
+        $grid->getResource()->loadByGridBlockId($grid, $gridBlockId);
+
+        return $grid->getId() ? $grid : null;
+    }
+
+    private function _loadColumnByCode(int $gridId, string $columnCode): ?MageAustralia_AdminGrid_Model_Column
+    {
+        /** @var MageAustralia_AdminGrid_Model_Column $column */
+        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+            ->addFieldToFilter('grid_id', $gridId)
+            ->addFieldToFilter('column_code', $columnCode)
+            ->getFirstItem();
+
+        return $column->getId() ? $column : null;
+    }
+
     private function _sendJson(array $data, int $httpCode = 200): void
     {
+        $body = json_encode($data, JSON_UNESCAPED_UNICODE);
         $this->getResponse()
             ->setHttpResponseCode($httpCode)
             ->setHeader('Content-Type', 'application/json', true)
-            ->setBody(json_encode($data, JSON_UNESCAPED_UNICODE));
+            ->setBody($body === false ? '{"error":"Encoding error"}' : $body);
     }
 }

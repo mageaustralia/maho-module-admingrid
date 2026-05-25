@@ -87,12 +87,8 @@ class MageAustralia_AdminGrid_Model_Observer
         MageAustralia_AdminGrid_Model_Grid $gridModel,
     ): array {
         $customColumns = Mage::getModel('mageaustralia_admingrid/column')
-            ->getCollection();
-        if ($customColumns === false) {
-            return [];
-        }
-
-        $customColumns->addActiveGridFilter((int) $gridModel->getId());
+            ->getCollection()
+            ->addActiveGridFilter((int) $gridModel->getId());
 
         if ($customColumns->getSize() === 0) {
             return [];
@@ -292,82 +288,6 @@ class MageAustralia_AdminGrid_Model_Observer
     }
 
     /**
-     * Build a correlated subquery expression for sorting by an EAV attribute.
-     * This avoids adding a JOIN to the main query while still enabling ORDER BY.
-     *
-     * Returns a DB expression like: (SELECT value FROM catalog_product_entity_varchar
-     *   WHERE entity_id = e.entity_id AND attribute_id = 119 AND store_id = 0)
-     */
-    /**
-     * Filter callback for EAV custom columns.
-     * Adds a WHERE EXISTS subquery — no JOIN on the main collection.
-     */
-    public function filterEavColumn(\Maho\Data\Collection\Db $collection, \Maho\DataObject $column): void
-    {
-        $value = $column->getFilter()->getValue();
-        if ($value === null || $value === '') {
-            return;
-        }
-
-        $sourceConfig = $column->getData('admingrid_source_config');
-        if (!$sourceConfig) {
-            return;
-        }
-
-        $attrCode = $sourceConfig['attribute_code'] ?? null;
-        $entityType = $sourceConfig['entity_type'] ?? 'catalog_product';
-        if (!$attrCode) {
-            return;
-        }
-
-        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
-        if (!$attribute || !$attribute->getId() || !$attribute->getBackendTable()) {
-            return;
-        }
-
-        $backendTable = $attribute->getBackendTable();
-        $attrId = (int) $attribute->getId();
-        $conn = $collection->getConnection();
-
-        // For text/varchar: LIKE match. For select/int: exact match.
-        if (is_array($value)) {
-            // Range filter (from/to) for number/date types
-            if (!empty($value['from'])) {
-                $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
-                    . ' WHERE _eav.entity_id = e.entity_id'
-                    . (' AND _eav.attribute_id = ' . $attrId)
-                    . ' AND _eav.store_id = 0'
-                    . ' AND _eav.value >= ' . $conn->quote($value['from']);
-                $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
-            }
-
-            if (!empty($value['to'])) {
-                $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
-                    . ' WHERE _eav.entity_id = e.entity_id'
-                    . (' AND _eav.attribute_id = ' . $attrId)
-                    . ' AND _eav.store_id = 0'
-                    . ' AND _eav.value <= ' . $conn->quote($value['to']);
-                $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
-            }
-        } else {
-            // Exact match (options/select) or LIKE (text)
-            $backendType = $attribute->getBackendType();
-            if (in_array($backendType, ['int', 'decimal']) || $attribute->usesSource()) {
-                $valueCond = '_eav.value = ' . $conn->quote($value);
-            } else {
-                $valueCond = '_eav.value LIKE ' . $conn->quote('%' . $value . '%');
-            }
-
-            $subquery = sprintf('SELECT 1 FROM %s AS _eav', $backendTable)
-                . ' WHERE _eav.entity_id = e.entity_id'
-                . (' AND _eav.attribute_id = ' . $attrId)
-                . ' AND _eav.store_id = 0'
-                . (' AND ' . $valueCond);
-            $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
-        }
-    }
-
-    /**
      * Build correlated subquery for sorting/filtering by a related table column.
      */
     private function buildRelatedSortExpression(MageAustralia_AdminGrid_Model_Column $customCol): \Maho\Db\Expr|null
@@ -381,59 +301,45 @@ class MageAustralia_AdminGrid_Model_Observer
             return null;
         }
 
-        $resource = Mage::getSingleton('core/resource');
-        $table = $resource->getTableName($relatedTable);
-
-        $joinParts = explode('=', (string) $joinOn);
-        if (count($joinParts) !== 2) {
+        // Validate identifiers before they reach SQL (config may predate write-time checks).
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $parsedJoin = $helper->parseJoinOn((string) $joinOn);
+        if (!$parsedJoin || !$helper->isSafeIdentifier((string) $colName)) {
             return null;
         }
 
-        $localCol = trim($joinParts[0]);   // e.g. 'order_id'
-        $remoteCol = trim($joinParts[1]);  // e.g. 'entity_id'
+        [$localCol, $remoteCol] = $parsedJoin;
+
+        $resource = Mage::getSingleton('core/resource');
+        $read = $resource->getConnection('core_read');
+        $table = $resource->getTableName($relatedTable);
 
         return new Maho\Db\Expr(
-            sprintf('(SELECT %s FROM %s', $colName, $table)
-            . sprintf(' WHERE %s = main_table.%s', $remoteCol, $localCol)
+            '(SELECT ' . $read->quoteIdentifier($colName)
+            . ' FROM ' . $read->quoteIdentifier($table)
+            . ' WHERE ' . $read->quoteIdentifier($remoteCol)
+            . ' = ' . $read->quoteIdentifier('main_table.' . $localCol)
             . ' LIMIT 1)',
         );
     }
 
     /**
-     * @return Maho\Db\Expr|null
+     * Collect non-empty values of $localCol across the loaded collection,
+     * used as the IN(...) key set for batch hydration.
+     *
+     * @return array<int, mixed>
      */
-    /** @phpstan-ignore method.unused */
-    private function buildEavSortExpression(MageAustralia_AdminGrid_Model_Column $customCol): ?\Maho\Db\Expr
+    private function collectKeys(\Maho\Data\Collection\Db $collection, string $localCol): array
     {
-        $sourceConfig = $customCol->getSourceConfig();
-        $attrCode = $sourceConfig['attribute_code'] ?? null;
-        $entityType = $sourceConfig['entity_type'] ?? 'catalog_product';
-
-        if (!$attrCode) {
-            return null;
+        $keys = [];
+        foreach ($collection as $item) {
+            $id = $item->getData($localCol);
+            if ($id) {
+                $keys[] = $id;
+            }
         }
 
-        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
-        if (!$attribute || !$attribute->getId() || !$attribute->getBackendTable()) {
-            return null;
-        }
-
-        $backendTable = $attribute->getBackendTable();
-        $attrId = (int) $attribute->getId();
-
-        // Check if backend table has store_id (catalog does, customer doesn't)
-        $read = Mage::getSingleton('core/resource')->getConnection('core_read');
-        $storeClause = $read->tableColumnExists($backendTable, 'store_id')
-            ? ' AND store_id = 0'
-            : '';
-
-        return new Maho\Db\Expr(
-            '(SELECT value FROM ' . $backendTable
-            . ' WHERE entity_id = e.entity_id'
-            . (' AND attribute_id = ' . $attrId)
-            . $storeClause
-            . ' LIMIT 1)',
-        );
+        return $keys;
     }
 
     /**
@@ -484,51 +390,6 @@ class MageAustralia_AdminGrid_Model_Observer
     }
 
     /**
-     * Apply LEFT JOINs for related-table columns.
-     * Each join is deduplicated by alias.
-     */
-    /** @phpstan-ignore method.unused */
-    private function applyRelatedJoins(\Maho\Data\Collection\Db $collection, array $joins): void
-    {
-        $resource = Mage::getSingleton('core/resource');
-
-        // Group columns by alias to do one JOIN per table
-        $joinMap = []; // alias => ['table'=>..., 'join_on'=>..., 'columns'=>[...]]
-        foreach ($joins as $join) {
-            $alias = $join['alias'];
-            if (!isset($joinMap[$alias])) {
-                $joinMap[$alias] = [
-                    'table'   => $join['table'],
-                    'join_on' => $join['join_on'],
-                    'columns' => [],
-                ];
-            }
-
-            $joinMap[$alias]['columns'][] = $join['column'];
-        }
-
-        foreach ($joinMap as $alias => $joinInfo) {
-            $table = $resource->getTableName($joinInfo['table']);
-            $joinOnParts = explode('=', (string) $joinInfo['join_on']);
-            if (count($joinOnParts) !== 2) {
-                continue;
-            }
-
-            $leftCol = trim($joinOnParts[0]);
-            $rightCol = trim($joinOnParts[1]);
-
-            // Select the specific columns we need from this joined table
-            $columns = array_unique($joinInfo['columns']);
-
-            $collection->getSelect()->joinLeft(
-                [$alias => $table],
-                sprintf('main_table.%s = %s.%s', $leftCol, $alias, $rightCol),
-                $columns,
-            );
-        }
-    }
-
-    /**
      * Post-load hydration for related table columns.
      * Batch-fetches values for visible rows from a related table (e.g. order data for invoices).
      */
@@ -545,24 +406,16 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        // Parse join_on: "order_id = entity_id" → local=order_id, remote=entity_id
-        $joinParts = explode('=', (string) $joinOn);
-        if (count($joinParts) !== 2) {
+        // Validate identifiers before they reach SQL (config may predate write-time checks).
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $parsedJoin = $helper->parseJoinOn((string) $joinOn);
+        if (!$parsedJoin || !$helper->isSafeIdentifier((string) $colName)) {
             return;
         }
 
-        $localCol = trim($joinParts[0]);   // e.g. 'order_id'
-        $remoteCol = trim($joinParts[1]);  // e.g. 'entity_id'
+        [$localCol, $remoteCol] = $parsedJoin;
 
-        // Gather local key values from the loaded collection
-        $localIds = [];
-        foreach ($collection as $item) {
-            $id = $item->getData($localCol);
-            if ($id) {
-                $localIds[] = $id;
-            }
-        }
-
+        $localIds = $this->collectKeys($collection, $localCol);
         if ($localIds === []) {
             return;
         }
@@ -573,17 +426,15 @@ class MageAustralia_AdminGrid_Model_Observer
 
         $select = $read->select()
             ->from($table, [$remoteCol, $colName])
-            ->where($remoteCol . ' IN (?)', $localIds);
+            ->where($read->quoteIdentifier($remoteCol) . ' IN (?)', $localIds);
 
         $rows = $read->fetchPairs($select);
 
-        // Inject into collection items
-        $customCol->getData('column_code');
-        $columnIndex = $colName; // The grid column reads from this index
+        // Inject into collection items — the grid column reads from the colName index.
         foreach ($collection as $item) {
             $key = $item->getData($localCol);
             if ($key !== null && isset($rows[$key])) {
-                $item->setData($columnIndex, $rows[$key]);
+                $item->setData($colName, $rows[$key]);
             }
         }
     }
@@ -607,23 +458,24 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
-        $joinParts = explode('=', (string) $joinOn);
-        if (count($joinParts) !== 2) {
+        // Validate identifiers before they reach SQL (config may predate write-time checks).
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $parsedJoin = $helper->parseJoinOn((string) $joinOn);
+        if (!$parsedJoin || !is_string($table)) {
             return;
         }
 
-        $localCol = trim($joinParts[0]);
-        $remoteCol = trim($joinParts[1]);
+        [$localCol, $remoteCol] = $parsedJoin;
 
-        // Gather local IDs
-        $localIds = [];
-        foreach ($collection as $item) {
-            $id = $item->getData($localCol);
-            if ($id) {
-                $localIds[] = $id;
-            }
+        $fields = array_values(array_filter(
+            (array) $fields,
+            fn($field): bool => $helper->isSafeIdentifier((string) $field),
+        ));
+        if ($fields === []) {
+            return;
         }
 
+        $localIds = $this->collectKeys($collection, $localCol);
         if ($localIds === []) {
             return;
         }
@@ -634,14 +486,18 @@ class MageAustralia_AdminGrid_Model_Observer
 
         $select = $read->select()
             ->from($tableName, array_merge([$remoteCol], $fields))
-            ->where($remoteCol . ' IN (?)', $localIds);
+            ->where($read->quoteIdentifier($remoteCol) . ' IN (?)', $localIds);
 
-        // Apply filters (e.g. address_type = 'shipping')
+        // Apply filters (e.g. address_type = 'shipping') — skip unsafe column names.
         foreach ($filter as $filterCol => $filterVal) {
+            if (!$helper->isSafeIdentifier((string) $filterCol)) {
+                continue;
+            }
+
             if ($filterVal === null) {
-                $select->where($filterCol . ' IS NULL');
+                $select->where($read->quoteIdentifier($filterCol) . ' IS NULL');
             } else {
-                $select->where($filterCol . ' = ?', $filterVal);
+                $select->where($read->quoteIdentifier($filterCol) . ' = ?', $filterVal);
             }
         }
 

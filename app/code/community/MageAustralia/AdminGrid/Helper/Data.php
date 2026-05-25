@@ -418,4 +418,162 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
             default                    => 'text',
         };
     }
+
+    // ── Security: identifier validation for custom-column SQL ─────────────
+
+    /**
+     * Strict identifier guard. Only [a-z0-9_], 1-64 chars.
+     *
+     * Custom-column source_config carries table/column/join identifiers that end
+     * up in raw SQL fragments. Constraining them to this character set means a
+     * stored value can never contain quotes, spaces, parentheses or semicolons,
+     * so it cannot break out of an identifier position (SQL-injection defence).
+     */
+    public function isSafeIdentifier(string $identifier): bool
+    {
+        return preg_match('/^[a-z0-9_]{1,64}$/i', $identifier) === 1;
+    }
+
+    /**
+     * Parse a "local = remote" join expression into two validated identifiers.
+     *
+     * @return array{0: string, 1: string}|null [localCol, remoteCol], or null if malformed/unsafe
+     */
+    public function parseJoinOn(?string $joinOn): ?array
+    {
+        if ($joinOn === null || $joinOn === '') {
+            return null;
+        }
+
+        $parts = explode('=', $joinOn);
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        $local = trim($parts[0]);
+        $remote = trim($parts[1]);
+        if (!$this->isSafeIdentifier($local) || !$this->isSafeIdentifier($remote)) {
+            return null;
+        }
+
+        return [$local, $remote];
+    }
+
+    /**
+     * Validate a custom column's source_config against the trusted, server-derived
+     * schema for the grid before it is persisted. Returns an error message, or null
+     * when the config is safe to store.
+     *
+     * This is the primary defence against SQL injection via custom columns: only
+     * identifiers the helper itself discovered (real DB columns / preset composites)
+     * are ever allowed into source_config.
+     */
+    public function validateSourceConfig(string $gridBlockId, string $sourceType, array $config): ?string
+    {
+        return match ($sourceType) {
+            'static'        => $this->validateStaticSourceConfig($gridBlockId, $config),
+            'computed'      => $this->validateComputedSourceConfig($gridBlockId, $config),
+            'eav_attribute' => $this->validateEavSourceConfig($config),
+            'category'      => null,
+            default         => 'Unknown source type: ' . $sourceType,
+        };
+    }
+
+    private function validateStaticSourceConfig(string $gridBlockId, array $config): ?string
+    {
+        $colName = $config['column_name'] ?? null;
+        if ($colName === null || $colName === '') {
+            return null; // column reads from its own code; no extra identifier to vet
+        }
+
+        if (!$this->isSafeIdentifier((string) $colName)) {
+            return 'Invalid column name.';
+        }
+
+        $allowed = $this->getCollectionColumns($gridBlockId);
+        if (!isset($allowed[$colName])) {
+            return 'Column not available for this grid: ' . $colName;
+        }
+
+        $expectedRelated = $allowed[$colName]['related_table'] ?? null;
+        $postedRelated = $config['related_table'] ?? null;
+        if ($postedRelated !== $expectedRelated) {
+            return 'Related table mismatch for column: ' . $colName;
+        }
+
+        if ($postedRelated !== null
+            && ($config['join_on'] ?? null) !== ($allowed[$colName]['join_on'] ?? null)
+        ) {
+            return 'Invalid join condition.';
+        }
+
+        return null;
+    }
+
+    private function validateComputedSourceConfig(string $gridBlockId, array $config): ?string
+    {
+        $table = $config['table'] ?? null;
+        if ($table === null) {
+            return null;
+        }
+
+        $preset = null;
+        foreach ($this->getCompositeColumns($gridBlockId) as $candidate) {
+            if (($candidate['config']['table'] ?? null) === $table) {
+                $preset = $candidate['config'];
+                break;
+            }
+        }
+
+        if ($preset === null) {
+            return 'Composite table not allowed: ' . $table;
+        }
+
+        if (($config['join_on'] ?? null) !== ($preset['join_on'] ?? null)) {
+            return 'Invalid composite join condition.';
+        }
+
+        // SQL-touching keys must stay within the preset; fields/template are a subset.
+        if (($config['filter'] ?? []) != ($preset['filter'] ?? [])) {
+            return 'Composite filter cannot be modified.';
+        }
+
+        $allowedFields = $preset['fields'] ?? [];
+        foreach (($config['fields'] ?? []) as $field) {
+            if (!in_array($field, $allowedFields, true)) {
+                return 'Field not allowed: ' . $field;
+            }
+        }
+
+        foreach (($config['template'] ?? []) as $line) {
+            foreach ((array) $line as $field) {
+                if (!in_array($field, $allowedFields, true)) {
+                    return 'Template field not allowed: ' . $field;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function validateEavSourceConfig(array $config): ?string
+    {
+        $attrCode = $config['attribute_code'] ?? null;
+        $entityType = $config['entity_type'] ?? 'catalog_product';
+
+        if ($attrCode === null || $attrCode === '') {
+            return 'Missing attribute code.';
+        }
+
+        if (!$this->isSafeIdentifier((string) $attrCode) || !$this->isSafeIdentifier((string) $entityType)) {
+            return 'Invalid attribute or entity type.';
+        }
+
+        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
+        if (!$attribute || !$attribute->getId()) {
+            return 'Unknown attribute: ' . $attrCode;
+        }
+
+        return null;
+    }
 }
