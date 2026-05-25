@@ -876,23 +876,20 @@ class MageAustralia_AdminGrid_Model_Observer
         // Find product IDs that had no thumbnail
         $missingIds = array_diff(array_map(intval(...), $productIds), array_keys($result));
 
-        // Fallback: for products without thumbnails, check configurable parent
+        // Fallback: for products without their own thumbnail, use the configurable parent's.
+        // getParentIdsByChild() returns a FLAT list of parent ids with no child mapping, so
+        // query catalog_product_super_link directly to get child => parent pairs.
         if ($missingIds !== []) {
-            $parentMap = Mage::getResourceSingleton('catalog/product_type_configurable')
-                ->getParentIdsByChild($missingIds);
+            $resource = Mage::getSingleton('core/resource');
+            $read = $resource->getConnection('core_read');
+            $childToParent = $read->fetchPairs(
+                $read->select()
+                    ->from($resource->getTableName('catalog/product_super_link'), ['product_id', 'parent_id'])
+                    ->where('product_id IN (?)', $missingIds),
+            );
 
-            // getParentIdsByChild() returns childId => [parentId, ...]; flatten to first parent
-            $childToParent = [];
-            $allParentIds = [];
-            foreach ($parentMap as $childId => $parents) {
-                if (!empty($parents)) {
-                    $childToParent[(int) $childId] = (int) $parents[0];
-                    $allParentIds[] = (int) $parents[0];
-                }
-            }
-
-            if ($allParentIds !== []) {
-                $parentIds = array_unique($allParentIds);
+            if ($childToParent !== []) {
+                $parentIds = array_unique(array_map('intval', array_values($childToParent)));
                 $parentColl = Mage::getResourceModel('catalog/product_collection')
                     ->addAttributeToSelect('thumbnail')
                     ->addFieldToFilter('entity_id', ['in' => $parentIds]);
@@ -902,9 +899,9 @@ class MageAustralia_AdminGrid_Model_Observer
                 }
 
                 foreach ($childToParent as $childId => $parentId) {
-                    $parentVal = $parentThumbs[$parentId] ?? null;
+                    $parentVal = $parentThumbs[(int) $parentId] ?? null;
                     if ($parentVal && $parentVal !== 'no_selection') {
-                        $result[$childId] = $mediaUrl . $parentVal;
+                        $result[(int) $childId] = $mediaUrl . $parentVal;
                     }
                 }
             }
