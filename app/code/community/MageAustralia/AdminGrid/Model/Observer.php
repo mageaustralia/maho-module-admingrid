@@ -87,8 +87,13 @@ class MageAustralia_AdminGrid_Model_Observer
         MageAustralia_AdminGrid_Model_Grid $gridModel,
     ): array {
         $customColumns = Mage::getModel('mageaustralia_admingrid/column')
-            ->getCollection()
-            ->addActiveGridFilter((int) $gridModel->getId());
+            ->getCollection();
+        // getCollection() is typed ...|false in the Maho stubs — keep this guard for PHPStan.
+        if ($customColumns === false) {
+            return [];
+        }
+
+        $customColumns->addActiveGridFilter((int) $gridModel->getId());
 
         if ($customColumns->getSize() === 0) {
             return [];
