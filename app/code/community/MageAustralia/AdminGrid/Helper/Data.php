@@ -576,4 +576,334 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
 
         return null;
     }
+
+    // ── Inline cell editing ──────────────────────────────────────────────
+
+    /**
+     * Column codes that are never inline-editable.
+     *
+     *  - entity_id / id / massaction / action / checkbox: structural grid columns.
+     *  - sku: EAV but static backend — not settable via updateAttributes; a
+     *    dedicated resource save path would be needed (out of scope for now).
+     *  - qty: cataloginventory stock item, not an EAV attribute — needs a stock
+     *    save path (out of scope for now).
+     *  - categories / websites: relation lists, not scalar attribute values.
+     *  - set / type / attribute_set_id / entity_type_id: structural, not editable inline.
+     */
+    private const array NON_EDITABLE_CODES = [
+        'entity_id', 'id', 'massaction', 'action', 'checkbox',
+        'sku', 'qty', 'categories', 'websites',
+        'set', 'type', 'attribute_set_id', 'entity_type_id',
+    ];
+
+    /**
+     * Whether a grid column (native OR custom) maps to a writable catalog_product
+     * EAV attribute and may therefore be made inline-editable. The backend is the
+     * single source of truth for eligibility; the JS trusts this, not a name prefix.
+     */
+    public function isColumnEditableEligible(string $gridBlockId, string $columnCode): bool
+    {
+        return $this->resolveEligibleAttribute($gridBlockId, $columnCode) !== null;
+    }
+
+    /**
+     * Resolve the writable EAV attribute a column maps to, or null if the column
+     * is not eligible for inline editing. Handles both module-added custom columns
+     * (attribute read from source_config) and native grid columns (column code ==
+     * attribute code on the product grid).
+     */
+    public function resolveEligibleAttribute(string $gridBlockId, string $columnCode): ?Mage_Eav_Model_Entity_Attribute_Abstract
+    {
+        if ($columnCode === '' || in_array($columnCode, self::NON_EDITABLE_CODES, true)) {
+            return null;
+        }
+
+        // Custom (module-added) columns: composite/category are never editable;
+        // otherwise resolve the attribute declared in source_config.
+        if (str_starts_with($columnCode, 'custom_')) {
+            if (str_starts_with($columnCode, 'custom_composite_') || $columnCode === 'custom_categories') {
+                return null;
+            }
+
+            $column = $this->loadGridColumn($gridBlockId, $columnCode);
+            return $column ? $this->getEditableAttribute($column) : null;
+        }
+
+        // Native columns: inline editing supported on the product grid, where the
+        // column code equals the attribute code (name, status, visibility, price, …).
+        if (!$this->isProductGrid($gridBlockId) || !$this->isSafeIdentifier($columnCode)) {
+            return null;
+        }
+
+        $attribute = Mage::getSingleton('eav/config')->getAttribute('catalog_product', $columnCode);
+        if (!$attribute || !$attribute->getId() || $attribute->getBackendType() === 'static') {
+            return null;
+        }
+
+        return $attribute;
+    }
+
+    /**
+     * Load a grid record by its block id (null if not registered yet).
+     */
+    public function loadGridModel(string $gridBlockId): ?MageAustralia_AdminGrid_Model_Grid
+    {
+        /** @var MageAustralia_AdminGrid_Model_Grid $grid */
+        $grid = Mage::getModel('mageaustralia_admingrid/grid');
+        /** @var MageAustralia_AdminGrid_Model_Resource_Grid $gridResource */
+        $gridResource = $grid->getResource();
+        $gridResource->loadByGridBlockId($grid, $gridBlockId);
+
+        return $grid->getId() ? $grid : null;
+    }
+
+    /**
+     * Load a stored column record for a grid by code (null if absent).
+     */
+    public function loadGridColumn(string $gridBlockId, string $columnCode): ?MageAustralia_AdminGrid_Model_Column
+    {
+        $grid = $this->loadGridModel($gridBlockId);
+        if (!$grid) {
+            return null;
+        }
+
+        /** @var MageAustralia_AdminGrid_Model_Column $column */
+        $column = Mage::getModel('mageaustralia_admingrid/column')->getCollection()
+            ->addFieldToFilter('grid_id', $grid->getId())
+            ->addFieldToFilter('column_code', $columnCode)
+            ->getFirstItem();
+
+        return $column->getId() ? $column : null;
+    }
+
+    /**
+     * Load the editable-enabled column record for a grid by its code.
+     *
+     * Returns null unless a record exists, is flagged is_editable, is an
+     * EAV-attribute column, and resolves to a real, non-static (writable)
+     * attribute. Native columns become editable by an admin toggling them on,
+     * which persists a lightweight marker record (see reconcileEditableColumns).
+     * This is re-run server-side on every save — the client flag is never trusted.
+     */
+    public function loadEditableColumn(string $gridBlockId, string $columnCode): ?MageAustralia_AdminGrid_Model_Column
+    {
+        if ($columnCode === '' || in_array($columnCode, self::NON_EDITABLE_CODES, true)) {
+            return null;
+        }
+
+        $column = $this->loadGridColumn($gridBlockId, $columnCode);
+        if (!$column || !$column->isEditable()) {
+            return null;
+        }
+
+        if ($column->getData('source_type') !== 'eav_attribute') {
+            return null;
+        }
+
+        return $this->getEditableAttribute($column) ? $column : null;
+    }
+
+    /**
+     * Resolve the writable EAV attribute behind an editable column, or null.
+     */
+    public function getEditableAttribute(MageAustralia_AdminGrid_Model_Column $column): ?Mage_Eav_Model_Entity_Attribute_Abstract
+    {
+        if ($column->getData('source_type') !== 'eav_attribute') {
+            return null;
+        }
+
+        $config = $column->getSourceConfig();
+        $attrCode = $config['attribute_code'] ?? null;
+        $entityType = $config['entity_type'] ?? 'catalog_product';
+
+        if (!$attrCode || !$this->isSafeIdentifier((string) $attrCode) || !$this->isSafeIdentifier((string) $entityType)) {
+            return null;
+        }
+
+        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
+        if (!$attribute || !$attribute->getId()) {
+            return null;
+        }
+
+        // Static attributes (entity_id, sku, ...) are not writable via updateAttributes.
+        if ($attribute->getBackendType() === 'static') {
+            return null;
+        }
+
+        return $attribute;
+    }
+
+    /**
+     * Build editor metadata (input kind, options, scope label) for an editable
+     * column at a given store scope. Returns null when the column is not editable.
+     *
+     * @return array{input: string, options: array<int, array{value: string, label: string}>, scope_label: string, scope: string, store_id: int}|null
+     */
+    public function getEditorMeta(MageAustralia_AdminGrid_Model_Column $column, int $storeId): ?array
+    {
+        $attribute = $this->getEditableAttribute($column);
+        if (!$attribute) {
+            return null;
+        }
+
+        $options = [];
+        $input = 'text';
+        if ($attribute->usesSource()) {
+            $input = 'select';
+            /** @phpstan-ignore arguments.count */
+            foreach ($attribute->getSource()->getAllOptions(true) as $opt) {
+                $options[] = [
+                    'value' => (string) $opt['value'],
+                    'label' => (string) $opt['label'],
+                ];
+            }
+        }
+
+        return [
+            'input'       => $input,
+            'options'     => $options,
+            'scope'       => $this->getAttributeScope($attribute),
+            'scope_label' => $this->getScopeLabel($attribute, $storeId),
+            'store_id'    => $this->resolveSaveStoreId($attribute, $storeId),
+        ];
+    }
+
+    /**
+     * Store id at which a value must be written given the attribute's scope.
+     * Global attributes always write at the default (store 0).
+     */
+    public function resolveSaveStoreId(Mage_Eav_Model_Entity_Attribute_Abstract $attribute, int $storeId): int
+    {
+        if ($this->getAttributeScope($attribute) === 'global') {
+            return 0;
+        }
+
+        return $storeId > 0 ? $storeId : 0;
+    }
+
+    /**
+     * Attribute scope from the catalog is_global column (SCOPE_* constants).
+     * Non-catalog EAV attributes (e.g. customer) carry no is_global and are
+     * treated as global (saved at the default store).
+     */
+    private function getAttributeScope(Mage_Eav_Model_Entity_Attribute_Abstract $attribute): string
+    {
+        $isGlobal = $attribute->getData('is_global');
+        if ($isGlobal === null) {
+            return 'global';
+        }
+
+        return match ((int) $isGlobal) {
+            Mage_Catalog_Model_Resource_Eav_Attribute::SCOPE_WEBSITE => 'website',
+            Mage_Catalog_Model_Resource_Eav_Attribute::SCOPE_STORE   => 'store',
+            default                                                  => 'global',
+        };
+    }
+
+    private function getScopeLabel(Mage_Eav_Model_Entity_Attribute_Abstract $attribute, int $storeId): string
+    {
+        if ($this->getAttributeScope($attribute) === 'global') {
+            return '[GLOBAL]';
+        }
+
+        if ($storeId > 0) {
+            return '[' . Mage::app()->getStore($storeId)->getName() . ']';
+        }
+
+        return '[' . Mage::helper('adminhtml')->__('Default Values') . ']';
+    }
+
+    /**
+     * Reconcile the grid's persisted editable-column state to exactly the given
+     * set of codes. Called from the profile Save flow so that editability is
+     * batched with visible/order/width rather than saved per checkbox toggle.
+     *
+     * Custom columns store the flag on their own record; native columns are
+     * represented by a lightweight marker record that is created/removed here.
+     * Only eligible (writable-EAV) codes are honoured — the client is not trusted.
+     *
+     * @param array<int, mixed> $codes column codes the user marked editable
+     */
+    public function reconcileEditableColumns(string $gridBlockId, array $codes): void
+    {
+        $grid = $this->loadGridModel($gridBlockId);
+        if (!$grid) {
+            return;
+        }
+
+        $gridId = (int) $grid->getId();
+
+        // Desired set: only codes that resolve to a writable EAV attribute.
+        $desired = [];
+        foreach ($codes as $code) {
+            $code = (string) $code;
+            if ($code !== '' && $this->resolveEligibleAttribute($gridBlockId, $code)) {
+                $desired[$code] = true;
+            }
+        }
+
+        // Enable each desired column (set flag, or create a native marker).
+        foreach (array_keys($desired) as $code) {
+            $column = $this->loadGridColumn($gridBlockId, $code);
+            if ($column) {
+                if (!$column->isEditable()) {
+                    $column->setData('is_editable', 1)->save();
+                }
+
+                continue;
+            }
+
+            if (!str_starts_with($code, 'custom_')) {
+                $attribute = $this->resolveEligibleAttribute($gridBlockId, $code);
+                if ($attribute) {
+                    $this->createNativeMarker($gridId, $code, $attribute);
+                }
+            }
+        }
+
+        // Disable anything currently editable but no longer in the desired set.
+        $current = Mage::getModel('mageaustralia_admingrid/column')->getCollection();
+        if ($current === false) {
+            return;
+        }
+
+        $current->addFieldToFilter('grid_id', $gridId)
+            ->addFieldToFilter('is_editable', 1);
+
+        foreach ($current as $column) {
+            $code = (string) $column->getData('column_code');
+            if (isset($desired[$code])) {
+                continue;
+            }
+
+            // Native marker rows exist only to carry the flag → remove them.
+            if (!str_starts_with($code, 'custom_') && (bool) ($column->getSourceConfig()['native_marker'] ?? false)) {
+                $column->delete();
+            } else {
+                $column->setData('is_editable', 0)->save();
+            }
+        }
+    }
+
+    /**
+     * Persist a marker record that flags a native grid column inline-editable.
+     */
+    private function createNativeMarker(int $gridId, string $columnCode, Mage_Eav_Model_Entity_Attribute_Abstract $attribute): void
+    {
+        Mage::getModel('mageaustralia_admingrid/column')->setData([
+            'grid_id'       => $gridId,
+            'column_code'   => $columnCode,
+            'header'        => $attribute->getFrontendLabel() ?: $columnCode,
+            'column_type'   => 'text',
+            'source_type'   => 'eav_attribute',
+            'source_config' => Mage::helper('core')->jsonEncode([
+                'attribute_code' => $attribute->getAttributeCode(),
+                'entity_type'    => 'catalog_product',
+                'native_marker'  => true,
+            ]),
+            'sort_order'    => 0,
+            'is_active'     => 1,
+            'is_editable'   => 1,
+        ])->save();
+    }
 }

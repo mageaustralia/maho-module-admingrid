@@ -12,7 +12,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
      * they rely on form_key validation via _setForcedFormKeyActions() below.
      */
     private const array READONLY_AJAX_ACTIONS = [
-        'load', 'availableColumns', 'getColumnConfig', 'categoryTree',
+        'load', 'availableColumns', 'getColumnConfig', 'categoryTree', 'editorMeta', 'editableEligible',
     ];
 
     /**
@@ -22,6 +22,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         'saveColumn', 'deleteColumn',
         'saveProfile', 'deleteProfile', 'setDefault',
         'addColumn', 'removeColumn', 'renameColumn', 'updateColumnConfig',
+        'inlineEdit',
     ];
 
     #[\Override]
@@ -180,6 +181,10 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             'source_config' => $data['source_config'] ?? null,
             'sort_order'    => (int) ($data['sort_order'] ?? 0),
             'is_active'     => (int) ($data['is_active'] ?? 1),
+            // Only EAV-attribute columns can be inline-edited; force off otherwise.
+            'is_editable'   => (($data['source_type'] ?? 'static') === 'eav_attribute')
+                ? (int) ($data['is_editable'] ?? 0)
+                : 0,
         ]);
 
         try {
@@ -271,12 +276,26 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             $activeProfile = $profiles->getFirstItem();
         }
 
+        // Persisted editable columns for this grid — the authoritative starting
+        // state for the Columns dropdown's Editable checkboxes (independent of
+        // whether the grid currently has rows rendered).
+        $editableColumns = [];
+        $editableCollection = Mage::getModel('mageaustralia_admingrid/column')->getCollection();
+        if ($editableCollection !== false) {
+            $editableCollection->addFieldToFilter('grid_id', $gridId)
+                ->addFieldToFilter('is_editable', 1);
+            foreach ($editableCollection as $editableColumn) {
+                $editableColumns[] = $editableColumn->getData('column_code');
+            }
+        }
+
         $this->_sendJson([
-            'gridId'      => $gridId,
-            'profileId'   => $activeProfile ? (int) $activeProfile->getId() : null,
-            'profileName' => $activeProfile ? $activeProfile->getData('profile_name') : null,
-            'profiles'    => $profilesData,
-            'config'      => $activeProfile ? $activeProfile->getColumnConfig() : [],
+            'gridId'          => $gridId,
+            'profileId'       => $activeProfile ? (int) $activeProfile->getId() : null,
+            'profileName'     => $activeProfile ? $activeProfile->getData('profile_name') : null,
+            'profiles'        => $profilesData,
+            'config'          => $activeProfile ? $activeProfile->getColumnConfig() : [],
+            'editableColumns' => $editableColumns,
         ]);
     }
 
@@ -334,6 +353,19 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
 
         try {
             $profile->save();
+
+            // Editable columns are batched with the profile Save (like visible/
+            // order/width) rather than persisted per checkbox toggle. Reconcile
+            // the grid's editable state to exactly the submitted set.
+            $editableRaw = $this->getRequest()->getParam('editable_columns');
+            if ($editableRaw !== null) {
+                $editableCodes = json_decode((string) $editableRaw, true);
+                if (is_array($editableCodes)) {
+                    Mage::helper('mageaustralia_admingrid')
+                        ->reconcileEditableColumns((string) $grid->getData('grid_block_id'), $editableCodes);
+                }
+            }
+
             $this->_sendJson([
                 'success'   => true,
                 'profileId' => (int) $profile->getId(),
@@ -847,6 +879,155 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         ];
     }
 
+    // ── Inline cell editing ──────────────────────────────────────────────
+
+    /**
+     * GET: Return which of the supplied column codes are editable-eligible.
+     * The JS sends the codes it read from the grid DOM; the backend decides
+     * (maps to a writable catalog_product EAV attribute) — never the client.
+     */
+    #[\Maho\Config\Route('/admin/admingrid/editableEligible')]
+    public function editableEligibleAction(): void
+    {
+        $gridBlockId = (string) $this->getRequest()->getParam('grid_block_id');
+        $codesRaw = (string) $this->getRequest()->getParam('codes');
+        $codes = array_filter(array_map('trim', explode(',', $codesRaw)));
+
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $eligible = [];
+        foreach ($codes as $code) {
+            if ($helper->isColumnEditableEligible($gridBlockId, $code)) {
+                $eligible[] = $code;
+            }
+        }
+
+        $this->_sendJsonHelper(['codes' => $eligible]);
+    }
+
+    /**
+     * GET: Editor metadata for an editable cell — input kind, options, and the
+     * store-aware scope label. Read-only; the client caches per column+store.
+     */
+    #[\Maho\Config\Route('/admin/admingrid/editorMeta')]
+    public function editorMetaAction(): void
+    {
+        $gridBlockId = (string) $this->getRequest()->getParam('grid_block_id');
+        $columnCode = (string) $this->getRequest()->getParam('column_code');
+        $storeId = (int) $this->getRequest()->getParam('store_id', 0);
+
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $column = $helper->loadEditableColumn($gridBlockId, $columnCode);
+        if (!$column) {
+            $this->_sendJsonHelper(['editable' => false]);
+            return;
+        }
+
+        $meta = $helper->getEditorMeta($column, $storeId);
+        if ($meta === null) {
+            $this->_sendJsonHelper(['editable' => false]);
+            return;
+        }
+
+        $this->_sendJsonHelper([
+            'editable'   => true,
+            'input'      => $meta['input'],
+            'options'    => $meta['options'],
+            'scopeLabel' => $meta['scope_label'],
+        ]);
+    }
+
+    /**
+     * POST: Save a single inline-edited cell value.
+     *
+     * Re-derives editability server-side (never trusts the client flag), checks
+     * the caller may edit the target entity, then writes the attribute value at
+     * the correct store scope. Returns the re-rendered display value on success.
+     */
+    #[\Maho\Config\Route('/admin/admingrid/inlineEdit')]
+    public function inlineEditAction(): void
+    {
+        if (!$this->getRequest()->isPost()) {
+            $this->_sendJsonHelper(['success' => false, 'message' => $this->__('POST required')], 405);
+            return;
+        }
+
+        $gridBlockId = (string) $this->getRequest()->getParam('grid_block_id');
+        $columnCode = (string) $this->getRequest()->getParam('column_code');
+        $entityId = (int) $this->getRequest()->getParam('entity_id');
+        $value = (string) $this->getRequest()->getParam('value');
+        $storeId = (int) $this->getRequest()->getParam('store_id', 0);
+
+        if ($entityId <= 0) {
+            $this->_sendJsonHelper(['success' => false, 'message' => $this->__('Invalid record.')], 400);
+            return;
+        }
+
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $column = $helper->loadEditableColumn($gridBlockId, $columnCode);
+        if (!$column) {
+            $this->_sendJsonHelper(['success' => false, 'message' => $this->__('This column is not editable.')], 403);
+            return;
+        }
+
+        $attribute = $helper->getEditableAttribute($column);
+        if (!$attribute) {
+            $this->_sendJsonHelper(['success' => false, 'message' => $this->__('This column is not editable.')], 403);
+            return;
+        }
+
+        $entityType = $column->getSourceConfig()['entity_type'] ?? 'catalog_product';
+
+        // Object-level authorization: caller must be allowed to edit this entity type.
+        $aclResource = match ($entityType) {
+            'catalog_product' => 'catalog/products',
+            'customer'        => 'customer/manage',
+            default           => null,
+        };
+        if ($aclResource === null || !Mage::getSingleton('admin/session')->isAllowed($aclResource)) {
+            $this->_sendJsonHelper(['success' => false, 'message' => $this->__('You are not allowed to edit this record.')], 403);
+            return;
+        }
+
+        $saveStoreId = $helper->resolveSaveStoreId($attribute, $storeId);
+        $code = $attribute->getAttributeCode();
+
+        try {
+            if ($entityType === 'catalog_product') {
+                // Note: 'price' is an EAV attribute and saves fine for simple/virtual
+                // products. For configurable/bundle/grouped products the displayed
+                // price is dynamic (derived from children/options), so writing the
+                // price attribute here is stored but has no effect on their display.
+                Mage::getSingleton('catalog/product_action')
+                    ->updateAttributes([$entityId], [$code => $value], $saveStoreId);
+            } else {
+                $model = Mage::getModel($entityType === 'customer' ? 'customer/customer' : 'catalog/product')
+                    ->setStoreId($saveStoreId)
+                    ->load($entityId);
+                if (!$model->getId()) {
+                    $this->_sendJsonHelper(['success' => false, 'message' => $this->__('Record not found.')], 404);
+                    return;
+                }
+                $model->setData($code, $value)->save();
+            }
+
+            // Re-render the display value the grid would show for this cell.
+            $display = $attribute->usesSource()
+                ? (string) $attribute->getSource()->getOptionText($value)
+                : $value;
+
+            $this->_sendJsonHelper([
+                'success' => true,
+                'value'   => $display,
+            ]);
+        } catch (Exception $exception) {
+            Mage::logException($exception);
+            $this->_sendJsonHelper([
+                'success' => false,
+                'message' => $this->__('Save failed: %s', $exception->getMessage()),
+            ], 500);
+        }
+    }
+
     private function _requirePost(): bool
     {
         if (!$this->getRequest()->isPost()) {
@@ -875,6 +1056,18 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             ->getFirstItem();
 
         return $column->getId() ? $column : null;
+    }
+
+    /**
+     * JSON response via the core helper (module-overridable encoding).
+     * Used by the inline-edit endpoints.
+     */
+    private function _sendJsonHelper(array $data, int $httpCode = 200): void
+    {
+        $this->getResponse()
+            ->setHttpResponseCode($httpCode)
+            ->setHeader('Content-Type', 'application/json', true)
+            ->setBody(Mage::helper('core')->jsonEncode($data));
     }
 
     private function _sendJson(array $data, int $httpCode = 200): void

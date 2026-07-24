@@ -105,8 +105,19 @@ class MageAustralia_AdminGrid_Model_Observer
         foreach ($customColumns as $customCol) {
             $code = $customCol->getData('column_code');
 
-            // Skip if column already exists natively
-            if ($grid->getColumn($code)) {
+            // Column already exists natively. If this is an editable marker for
+            // that native column (e.g. an admin flagged the built-in "status"
+            // column editable), tag the existing column so its cells get the
+            // inline-edit affordance — we don't add a duplicate column.
+            $nativeColumn = $grid->getColumn($code);
+            if ($nativeColumn) {
+                if ($customCol->getData('source_type') === 'eav_attribute' && $customCol->isEditable()) {
+                    $nativeColumn->setData(
+                        'column_css_class',
+                        trim((string) $nativeColumn->getData('column_css_class') . ' admingrid-editable'),
+                    );
+                }
+
                 continue;
             }
 
@@ -253,6 +264,13 @@ class MageAustralia_AdminGrid_Model_Observer
                 $columnConfig['renderer'] = 'mageaustralia_admingrid/adminhtml_widget_grid_column_renderer_image';
                 $columnConfig['width'] = '80';
                 $columnConfig['filter'] = false;
+            }
+
+            // Editable cells: tag every cell of this column so the JS can attach
+            // the hover pencil + inline editor. Only EAV-attribute columns the
+            // admin has explicitly flagged is_editable qualify.
+            if ($isEav && $customCol->isEditable()) {
+                $columnConfig['column_css_class'] = trim($columnConfig['column_css_class'] . ' admingrid-editable');
             }
 
             $grid->addColumnAfter($code, $columnConfig, $afterColumn);

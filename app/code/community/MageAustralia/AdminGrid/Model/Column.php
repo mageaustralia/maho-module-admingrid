@@ -22,4 +22,12 @@ class MageAustralia_AdminGrid_Model_Column extends Mage_Core_Model_Abstract
         $decoded = json_decode($json, true);
         return is_array($decoded) ? $decoded : [];
     }
+
+    /**
+     * Whether this column's grid cells are flagged inline-editable.
+     */
+    public function isEditable(): bool
+    {
+        return (bool) (int) $this->getData('is_editable');
+    }
 }

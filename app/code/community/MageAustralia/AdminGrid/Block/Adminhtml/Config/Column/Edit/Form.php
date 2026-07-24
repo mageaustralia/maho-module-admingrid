@@ -104,6 +104,16 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
             ],
         ]);
 
+        $fieldset->addField('is_editable', 'select', [
+            'name'   => 'is_editable',
+            'label'  => $this->__('Editable'),
+            'note'   => $this->__('Allow inline editing of this column\'s cells in the grid (EAV attributes only).'),
+            'values' => [
+                ['value' => '0', 'label' => $this->__('No')],
+                ['value' => '1', 'label' => $this->__('Yes')],
+            ],
+        ]);
+
         if ($column && $column->getData()) {
             $data = $column->getData();
             // Pre-select the EAV attribute if editing an EAV column
