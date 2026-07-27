@@ -48,6 +48,12 @@
             <mageaustralia_admingrid>
                 <class>MageAustralia_AdminGrid_Block</class>
             </mageaustralia_admingrid>
+            <adminhtml>
+                <rewrite>
+                    <!-- Treat * and % as multi-character wildcards in admin grid text filters -->
+                    <widget_grid_column_filter_text>MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Text</widget_grid_column_filter_text>
+                </rewrite>
+            </adminhtml>
         </blocks>
         <helpers>
             <mageaustralia_admingrid>

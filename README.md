@@ -23,6 +23,10 @@ Inspired by [BL_CustomGrid](https://github.com/mage-eag/mage-enhanced-admin-grid
 - **Cross-table columns** — invoice/shipment/creditmemo grids can pull columns from order and payment tables
 - **EAV filtering** — dropdown filter for select attributes, text filter for others, using `EXISTS` subqueries
 - **EAV sorting** — correlated subquery in `ORDER BY`, no JOINs
+- **Inline cell editing** — flag a column "Editable" and edit its value straight in the grid (hover pencil → inline input or select), saved back to the underlying attribute at the correct store scope via AJAX — no need to open the record. Eligibility is decided server-side (writable, non-static EAV attributes only) and every save re-validates it and enforces per-entity-type ACL.
+- **Wildcard grid search** — `*` and `%` act as multi-character wildcards in grid text filters, so `foo*bar` (or `foo%bar`) matches "foo … bar". Restores BL_CustomGrid-style wildcard search; plain terms use the default escaped "contains" search.
+- **Index-friendly prefix filter** — an opt-in column text filter that builds `LIKE 'value%'` (index range scan) instead of the default `LIKE '%value%'` (full scan), keeping large order/product grids fast; a leading `*`/`%` opts back into the slower "contains" search when needed.
+- **Locale-configurable phone filter** — normalises the search input to digits and matches both the local and international forms of a number (calling code + trunk prefix configured per column — AU `+61`/`0`, UK `+44`/`0`, US `+1`/none, …), so an order is found whichever form the operator types. Targets a digits-only companion column.
 - **Product thumbnails** — image column renderer for `media_image` attributes
 - **AJAX grid reload** — adding/removing columns doesn't navigate away from the current page
 - **localStorage cache** — saved profile applied instantly on page load before server responds
@@ -152,6 +156,47 @@ Check a column to add it. Uncheck a custom column to remove it. Changes apply vi
 - **Profile dropdown** — switch between saved profiles
 
 Profiles are per admin user, per grid. Each user can have different column layouts.
+
+### Inline editing
+
+Flag a column **Editable** in its settings (batched into the profile **Save**). Eligible cells then show a pencil on hover — click to edit in place. Option-backed attributes render as a dropdown, everything else as a text input; the value saves back to the underlying attribute at the current store scope via AJAX.
+
+Only writable, non-static EAV attributes are eligible — for both module-added custom columns and native product-grid columns. The backend decides eligibility (the JS never trusts a name prefix) and re-validates it, enforcing per-entity-type ACL, on every save.
+
+### Wildcard search
+
+In any grid's text filter, `*` and `%` act as multi-character wildcards:
+
+- `foo*bar` or `foo%bar` → rows containing "foo" … "bar"
+- `foo*` → starts with "foo"
+- `*bar` → ends with "bar"
+
+A term with no wildcard uses the default escaped "contains" search. A literal `_` is matched as typed (escaped), so codes/SKUs with underscores still work.
+
+### Opt-in column filters (Prefix, Phone)
+
+Two extra filters are available for columns where the default "contains" search is too slow or too literal. Wire them via a column's `filter` config:
+
+```php
+// Index-friendly prefix search (LIKE 'value%')
+$this->addColumn('increment_id', [
+    'header' => $this->__('Order #'),
+    'index'  => 'increment_id',
+    'filter' => 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_prefix',
+]);
+
+// Locale-configurable phone search against a digits-only companion column
+$this->addColumn('phone', [
+    'header'             => $this->__('Phone'),
+    'index'              => 'phone',
+    'filter_index'       => 'phone_digits',   // generated column: digits only
+    'filter'             => 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_phone',
+    'phone_country_code' => '61',             // AU; use '44' UK, '1' US, …
+    'phone_trunk_prefix' => '0',              // set '' for NANP (US/CA)
+]);
+```
+
+With **Prefix**, a leading `*`/`%` opts back into the broad `LIKE '%value%'` search. With **Phone**, leaving `phone_country_code` empty just does a plain digits prefix search (no local/international expansion).
 
 ### Admin configuration
 
