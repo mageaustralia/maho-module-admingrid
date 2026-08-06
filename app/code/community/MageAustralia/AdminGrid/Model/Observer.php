@@ -41,6 +41,11 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
+        // Fast, word-based name search on heavy grids (MATCH ... AGAINST) instead of a
+        // leading-wildcard LIKE full scan. Applied before the profile checks so it works
+        // for every admin, not only those with a saved column profile.
+        $this->applyFulltextNameSearch($grid, (string) $gridBlockId);
+
         $userId = Mage::getSingleton('admin/session')->getUser()->getId();
         if (!$userId) {
             return;
@@ -173,6 +178,27 @@ class MageAustralia_AdminGrid_Model_Observer
                     $filterIndex = $colName;
                     $sortable = true;
                     $filterClass = $this->getFilterClassForType($columnType);
+
+                    // Optional per-column filter overrides for index-friendly /
+                    // normalised search on large flat tables:
+                    //  - "filter_index":  SQL column the filter targets, which may
+                    //    differ from the displayed column (e.g. a digits-only
+                    //    companion column for phone search).
+                    //  - "filter_block":  a custom grid column filter block alias.
+                    //  - "prefix_search": shortcut wiring the reusable prefix
+                    //    (LIKE 'value%') filter block.
+                    if (!empty($sourceConfig['filter_index'])) {
+                        $filterIndex = (string) $sourceConfig['filter_index'];
+                    }
+
+                    if (!empty($sourceConfig['filter_block'])) {
+                        $filterClass = (string) $sourceConfig['filter_block'];
+                    } elseif (!empty($sourceConfig['prefix_search'])) {
+                        $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_prefix';
+                        if (!str_contains((string) $filterIndex, '.')) {
+                            $filterIndex = 'main_table.' . $filterIndex;
+                        }
+                    }
                 }
             }
 
@@ -936,20 +962,25 @@ class MageAustralia_AdminGrid_Model_Observer
     private function getFilterClassForType(string $columnType): string
     {
         return match ($columnType) {
-            'options' => 'adminhtml/widget_grid_column_filter_select',
-            'number'  => 'adminhtml/widget_grid_column_filter_range',
-            'date'    => 'adminhtml/widget_grid_column_filter_date',
-            default   => 'adminhtml/widget_grid_column_filter_text',
+            'options'  => 'adminhtml/widget_grid_column_filter_select',
+            'number'   => 'adminhtml/widget_grid_column_filter_range',
+            'date'     => 'adminhtml/widget_grid_column_filter_date',
+            'datetime' => 'adminhtml/widget_grid_column_filter_datetime',
+            default    => 'adminhtml/widget_grid_column_filter_text',
         };
     }
 
     private function mapColumnType(string $type): string
     {
         return match ($type) {
-            'number' => 'number',
-            'date'   => 'date',
-            'image'  => 'text',
-            default  => 'text',
+            'number'   => 'number',
+            'date'     => 'date',
+            // 'date' renders the day only. Timestamp columns such as created_at and
+            // updated_at are more useful with the time kept, so they map to the grid's
+            // datetime renderer instead of losing it.
+            'datetime' => 'datetime',
+            'image'    => 'text',
+            default    => 'text',
         };
     }
 
@@ -963,5 +994,75 @@ class MageAustralia_AdminGrid_Model_Observer
         }
 
         return end($codes) ?: '';
+    }
+
+    /**
+     * Swap heavy-grid name-column filters to a FULLTEXT MATCH search.
+     *
+     * The default admin filter runs "name LIKE %term%" - a leading-wildcard full
+     * scan that took ~20s cold on the ~300k-row sales_flat_order_grid. Where a
+     * FULLTEXT index exists (declared in this module sql/schema.php), install a
+     * filter_condition_callback so the column searches via MATCH ... AGAINST.
+     * The map is intentionally explicit; extend it as more grids gain indexes.
+     */
+    private function applyFulltextNameSearch(Mage_Adminhtml_Block_Widget_Grid $grid, string $gridBlockId): void
+    {
+        $fulltextColumns = [
+            'sales_order_grid' => ['billing_name', 'shipping_name'],
+        ];
+        if (!isset($fulltextColumns[$gridBlockId])) {
+            return;
+        }
+        foreach ($fulltextColumns[$gridBlockId] as $columnId) {
+            $column = $grid->getColumn($columnId);
+            if ($column) {
+                $column->setFilterConditionCallback([$this, 'applyFulltextCondition']);
+            }
+        }
+    }
+
+    /**
+     * filter_condition_callback: boolean-mode MATCH ... AGAINST for a name column,
+     * so "campbell" matches "Matthew Campbell" (whole word / prefix) fast. Each token
+     * is required (+) and prefix-matched (*). InnoDB ignores tokens shorter than
+     * innodb_ft_min_token_size (3), so a query with any short token falls back to the
+     * original LIKE to stay correct.
+     */
+    public function applyFulltextCondition(\Maho\Data\Collection\Db $collection, Mage_Adminhtml_Block_Widget_Grid_Column $column): void
+    {
+        $filter = $column->getFilter();
+        $value = $filter ? $filter->getValue() : null;
+        if ($value === null || $value === '' || is_array($value)) {
+            return;
+        }
+
+        $field = $column->getFilterIndex() ?: $column->getIndex();
+        if (strpos($field, '.') === false) {
+            $field = 'main_table.' . $field;
+        }
+
+        $terms = [];
+        $hasShortToken = false;
+        foreach (preg_split('/\s+/', trim((string) $value), -1, PREG_SPLIT_NO_EMPTY) as $token) {
+            $token = preg_replace('/[+\-<>()~*"@]+/', '', $token);
+            if ($token === '') {
+                continue;
+            }
+            if (strlen($token) < 3) {
+                $hasShortToken = true;
+                break;
+            }
+            $terms[] = '+' . $token . '*';
+        }
+
+        if ($hasShortToken || $terms === []) {
+            $collection->addFieldToFilter($column->getIndex(), ['like' => '%' . $value . '%']);
+            return;
+        }
+
+        $collection->getSelect()->where(
+            'MATCH(' . $field . ') AGAINST (? IN BOOLEAN MODE)',
+            implode(' ', $terms),
+        );
     }
 }

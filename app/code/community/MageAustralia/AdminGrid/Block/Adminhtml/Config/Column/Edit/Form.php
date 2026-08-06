@@ -76,6 +76,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
                 ['value' => 'text',    'label' => $this->__('Text')],
                 ['value' => 'number',  'label' => $this->__('Number')],
                 ['value' => 'date',    'label' => $this->__('Date')],
+                ['value' => 'datetime', 'label' => $this->__('Date & Time')],
                 ['value' => 'options', 'label' => $this->__('Options (Dropdown)')],
                 ['value' => 'image',   'label' => $this->__('Image / Thumbnail')],
             ],

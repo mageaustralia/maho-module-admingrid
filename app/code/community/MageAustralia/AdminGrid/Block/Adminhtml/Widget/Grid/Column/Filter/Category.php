@@ -14,8 +14,7 @@ declare(strict_types=1);
  * @copyright  Copyright (c) 2026 MageAustralia
  * @license    https://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
  */
-class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
-    extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Abstract
+class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Abstract
 {
     public function getHtml(): string
     {
@@ -66,7 +65,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
         $paths = $conn->fetchCol(
             $conn->select()
                 ->from($cceTable, ['path'])
-                ->where('entity_id IN (?)', $categoryIds)
+                ->where('entity_id IN (?)', $categoryIds),
         );
 
         if (!empty($paths)) {
@@ -78,7 +77,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Category
             $descendantIds = $conn->fetchCol(
                 $conn->select()
                     ->from($cceTable, ['entity_id'])
-                    ->where(implode(' OR ', $orConditions))
+                    ->where(implode(' OR ', $orConditions)),
             );
             $allIds = array_merge($allIds, $descendantIds);
         }
