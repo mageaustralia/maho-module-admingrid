@@ -10,6 +10,28 @@ declare(strict_types=1);
 class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Select
 {
     /**
+     * Render a plain text input unless the attribute genuinely has options.
+     *
+     * The parent is the Select filter, so every EAV column inherited a <select>.
+     * For a free-text attribute (gtin, netsuite_id) that came out as an empty,
+     * unusable dropdown. getCondition() below already does a LIKE for exactly
+     * these attributes -- only the rendering was ever wrong.
+     */
+    #[\Override]
+    public function getHtml()
+    {
+        $options = $this->getColumn()->getOptions();
+        if (is_array($options) && count($options) > 0) {
+            return parent::getHtml();
+        }
+
+        return '<div class="field-100"><input type="text" name="' . $this->_getHtmlName()
+            . '" id="' . $this->_getHtmlId()
+            . '" value="' . $this->getEscapedValue()
+            . '" class="input-text no-changes"></div>';
+    }
+
+    /**
      * Return null to prevent the grid from calling addFieldToFilter.
      * Instead, we apply the filter directly in getCondition via the collection.
      */
