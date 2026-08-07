@@ -154,6 +154,22 @@ class MageAustralia_AdminGrid_Model_Observer
                         $options = $this->getAttributeOptions($attr);
                     }
                 }
+            } elseif ($sourceType === 'stock_managed') {
+                // Effective stock management: an item follows the global default when
+                // use_config_manage_stock = 1 and only overrides it otherwise, so the raw
+                // manage_stock column is wrong for every deferring row. Value is resolved
+                // post-load (below); filtering goes through a subselect of product_ids
+                // because EAV collections reject Expr in setOrder()/addFieldToFilter.
+                $columnType = 'options';
+                $options = [1 => Mage::helper('mageaustralia_admingrid')->__('Yes'), 0 => Mage::helper('mageaustralia_admingrid')->__('No')];
+                $sortable = false;
+                $filterIndex = 'entity_id';
+                $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_stockmanaged';
+
+                $grid->setData('admingrid_stock_columns', array_merge(
+                    $grid->getData('admingrid_stock_columns') ?: [],
+                    [$customCol],
+                ));
             } elseif ($sourceType === 'static') {
                 $sourceConfig = $customCol->getSourceConfig();
                 $colName = $sourceConfig['column_name'] ?? $code;
@@ -410,6 +426,7 @@ class MageAustralia_AdminGrid_Model_Observer
             'admingrid_related_columns'   => 'hydrateRelatedColumn',
             'admingrid_composite_columns' => 'hydrateCompositeColumn',
             'admingrid_category_columns'  => 'hydrateCategoryColumn',
+            'admingrid_stock_columns'     => 'hydrateStockManagedColumn',
         ];
 
         foreach ($hydrationSets as $dataKey => $method) {
@@ -485,6 +502,52 @@ class MageAustralia_AdminGrid_Model_Observer
             if ($key !== null && isset($rows[$key])) {
                 $item->setData($colName, $rows[$key]);
             }
+        }
+    }
+
+    /**
+     * Post-load hydration for the effective "Manage Stock" column.
+     *
+     * Resolves use_config_manage_stock against the global default so the cell shows
+     * what actually applies, not the stored override. Batch-fetched for the visible
+     * rows only, matching how the other hydrators here work.
+     */
+    private function hydrateStockManagedColumn(
+        \Maho\Data\Collection\Db $collection,
+        MageAustralia_AdminGrid_Model_Column $customCol,
+    ): void {
+        $productIds = $this->collectKeys($collection, 'entity_id');
+        if ($productIds === []) {
+            return;
+        }
+
+        $resource = Mage::getSingleton('core/resource');
+        $read = $resource->getConnection('core_read');
+
+        $select = $read->select()
+            ->from(
+                $resource->getTableName('cataloginventory/stock_item'),
+                ['product_id', 'manage_stock', 'use_config_manage_stock'],
+            )
+            ->where('product_id IN (?)', $productIds)
+            ->where('stock_id = ?', 1);
+
+        $configDefault = (int) (bool) Mage::getStoreConfig(
+            Mage_CatalogInventory_Model_Stock_Item::XML_PATH_MANAGE_STOCK,
+        );
+
+        $effective = [];
+        foreach ($read->fetchAll($select) as $row) {
+            $effective[(int) $row['product_id']] = ((int) $row['use_config_manage_stock'] === 1)
+                ? $configDefault
+                : (int) (bool) $row['manage_stock'];
+        }
+
+        $code = (string) $customCol->getData('column_code');
+        foreach ($collection as $item) {
+            $id = (int) $item->getData('entity_id');
+            // No stock_item row means nothing overrides the default.
+            $item->setData($code, $effective[$id] ?? $configDefault);
         }
     }
 

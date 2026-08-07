@@ -41,6 +41,7 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
                 ['value' => 'eav_attribute', 'label' => $this->__('EAV Attribute (auto-discovered)')],
                 ['value' => 'static',        'label' => $this->__('Static (from collection)')],
                 ['value' => 'computed',       'label' => $this->__('Computed')],
+                ['value' => 'stock_managed', 'label' => $this->__('Stock: Manage Stock (effective)')],
             ],
             'note' => $this->__('EAV = post-load hydration (no JOINs, safe for large tables)'),
         ]);
