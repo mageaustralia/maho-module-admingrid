@@ -270,6 +270,22 @@ class MageAustralia_AdminGrid_Model_Observer
                 $columnIndex = $sc['column_name'] ?? $code;
             }
 
+            // A price attribute rendered as text or number loses the currency and the
+            // from/to range - the core grid's own price columns get type => price, and an
+            // EAV price attribute should match them rather than degrade to a plain box.
+            // Detected from the attribute itself so existing columns correct themselves
+            // without being reconfigured.
+            if ($isEav && $columnType !== 'price') {
+                $sc = $customCol->getSourceConfig();
+                $attr = Mage::getSingleton('eav/config')->getAttribute(
+                    $sc['entity_type'] ?? 'catalog_product',
+                    $sc['attribute_code'] ?? '',
+                );
+                if ($attr && $attr->getId() && $attr->getFrontendInput() === 'price') {
+                    $columnType = 'price';
+                }
+            }
+
             $columnConfig = [
                 'header'           => $customCol->getData('header'),
                 'index'            => $columnIndex,
@@ -283,6 +299,12 @@ class MageAustralia_AdminGrid_Model_Observer
 
             if ($isEav || $sourceType === 'computed' || ($sourceType === 'static' && !empty($customCol->getSourceConfig()['related_table']))) {
                 $columnConfig['admingrid_source_config'] = $customCol->getSourceConfig();
+            }
+
+            if ($columnType === 'price') {
+                // Without this the price renderer has no currency to format against and
+                // the filter cannot offer its currency selector.
+                $columnConfig['currency_code'] = Mage::app()->getStore()->getBaseCurrencyCode();
             }
 
             if ($options !== null) {
@@ -1027,6 +1049,7 @@ class MageAustralia_AdminGrid_Model_Observer
         return match ($columnType) {
             'options'  => 'adminhtml/widget_grid_column_filter_select',
             'number'   => 'adminhtml/widget_grid_column_filter_range',
+            'price'    => 'adminhtml/widget_grid_column_filter_price',
             'date'     => 'adminhtml/widget_grid_column_filter_date',
             'datetime' => 'adminhtml/widget_grid_column_filter_datetime',
             default    => 'adminhtml/widget_grid_column_filter_text',
@@ -1037,6 +1060,7 @@ class MageAustralia_AdminGrid_Model_Observer
     {
         return match ($type) {
             'number'   => 'number',
+            'price'    => 'price',
             'date'     => 'date',
             // 'date' renders the day only. Timestamp columns such as created_at and
             // updated_at are more useful with the time kept, so they map to the grid's
