@@ -41,12 +41,23 @@ class MageAustralia_AdminGrid_Model_Observer
             return;
         }
 
+        if ($this->isTransientGrid($grid, (string) $gridBlockId)) {
+            return;
+        }
+
         // Fast, word-based name search on heavy grids (MATCH ... AGAINST) instead of a
         // leading-wildcard LIKE full scan. Applied before the profile checks so it works
         // for every admin, not only those with a saved column profile.
         $this->applyFulltextNameSearch($grid, (string) $gridBlockId);
 
-        $userId = Mage::getSingleton('admin/session')->getUser()->getId();
+        // Outside a browser session (CLI, cron, a headless render) there is no
+        // admin user and the unguarded getUser()->getId() was a fatal rather than
+        // a graceful skip. Mage_Admin_Model_Session declares
+        // `@method Mage_Admin_Model_User getUser()`, but that is a magic getter
+        // over getData('user') and the docblock simply does not admit the null.
+        // Reading the data key keeps the real nullability visible.
+        $adminUser = Mage::getSingleton('admin/session')->getData('user');
+        $userId = $adminUser instanceof Mage_Admin_Model_User ? $adminUser->getId() : null;
         if (!$userId) {
             return;
         }
@@ -275,7 +286,7 @@ class MageAustralia_AdminGrid_Model_Observer
             // EAV price attribute should match them rather than degrade to a plain box.
             // Detected from the attribute itself so existing columns correct themselves
             // without being reconfigured.
-            if ($isEav && $columnType !== 'price') {
+            if ($isEav) {
                 $sc = $customCol->getSourceConfig();
                 $attr = Mage::getSingleton('eav/config')->getAttribute(
                     $sc['entity_type'] ?? 'catalog_product',
@@ -283,6 +294,13 @@ class MageAustralia_AdminGrid_Model_Observer
                 );
                 if ($attr && $attr->getId() && $attr->getFrontendInput() === 'price') {
                     $columnType = 'price';
+                }
+
+                // Numeric attributes want a from/to range, not a single-value match:
+                // nobody searches for products priced exactly 49.95. The plain EAV
+                // filter above renders one box, so swap it for the range variant.
+                if (in_array($columnType, ['price', 'number'], true)) {
+                    $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_eavrange';
                 }
             }
 
@@ -1151,5 +1169,24 @@ class MageAustralia_AdminGrid_Model_Observer
             'MATCH(' . $field . ') AGAINST (? IN BOOLEAN MODE)',
             implode(' ', $terms),
         );
+    }
+
+    /**
+     * True for grids that should never be registered or given a column profile.
+     *
+     * Widget chooser popups are the case that matters. Their block id is a fresh
+     * uniqHash on every form render (`options_fieldset<hash>`), so each time an
+     * admin opens a chooser this module registers another grid row and another
+     * "Default" profile against an id that will never be seen again - unbounded
+     * junk, plus a Columns/Profile toolbar in a popup where it cannot usefully
+     * persist anything.
+     */
+    private function isTransientGrid(Mage_Adminhtml_Block_Widget_Grid $grid, string $gridBlockId): bool
+    {
+        if (str_contains((string) $grid->getType(), '_widget_chooser')) {
+            return true;
+        }
+
+        return (bool) preg_match('/^options_fieldset[0-9a-f]{8,}$/', $gridBlockId);
     }
 }
