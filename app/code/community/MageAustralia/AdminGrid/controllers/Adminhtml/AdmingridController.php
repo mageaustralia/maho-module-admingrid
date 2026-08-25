@@ -954,7 +954,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         $gridBlockId = (string) $this->getRequest()->getParam('grid_block_id');
         $columnCode = (string) $this->getRequest()->getParam('column_code');
         $entityId = (int) $this->getRequest()->getParam('entity_id');
-        $value = (string) $this->getRequest()->getParam('value');
+        $rawValue = (string) $this->getRequest()->getParam('value');
         $storeId = (int) $this->getRequest()->getParam('store_id', 0);
 
         if ($entityId <= 0) {
@@ -985,6 +985,22 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
         };
         if ($aclResource === null || !Mage::getSingleton('admin/session')->isAllowed($aclResource)) {
             $this->_sendJsonHelper(['success' => false, 'message' => $this->__('You are not allowed to edit this record.')], 403);
+            return;
+        }
+
+        // Normalise before anything is written. A numeric attribute given
+        // non-numeric text used to reach updateAttributes() as a plain string,
+        // and a decimal EAV column stores '' (or 'test') as 0.0000 without
+        // complaint. On special_price that silently means "free" rather than "no
+        // discount", which is how BOUNCE-4BT went out at $0 on four live orders.
+        try {
+            $value = $this->_normaliseInlineValue($attribute, $rawValue);
+        } catch (Mage_Core_Exception $normalisationError) {
+            // 200, not 4xx: a rejected value is a normal outcome of editing, not a
+            // transport failure. mahoFetch() throws on any non-2xx without reading
+            // the body, so the grid's own handler - which already renders
+            // data.message - never sees it and falls back to a bare "Save failed".
+            $this->_sendJsonHelper(['success' => false, 'message' => $normalisationError->getMessage()]);
             return;
         }
 
@@ -1026,6 +1042,56 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
                 'message' => $this->__('Save failed: %s', $exception->getMessage()),
             ], 500);
         }
+    }
+
+
+    /**
+     * Validate and normalise an inline-edited value for its attribute's storage type.
+     *
+     * Numeric attributes are the dangerous case. MySQL coerces a non-numeric
+     * string to 0 on a DECIMAL column, so 'test', '$152' or an empty box all used
+     * to land as 0.0000 with a success response - indistinguishable, to the
+     * merchandiser, from the edit having worked.
+     *
+     * An empty box returns null, which clears the attribute. That is the correct
+     * way to remove a special price: NULL means "no special price", whereas 0 is a
+     * real price of zero and makes the product free.
+     *
+     * @return string|null  null clears the attribute
+     * @throws Mage_Core_Exception when the input cannot be stored safely
+     */
+    private function _normaliseInlineValue(Mage_Eav_Model_Entity_Attribute_Abstract $attribute, string $rawValue): ?string
+    {
+        if (!in_array($attribute->getBackendType(), ['decimal', 'int'], true)) {
+            return $rawValue;
+        }
+
+        $trimmed = trim($rawValue);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        // Tolerate what a merchandiser reasonably types into a price cell:
+        // currency symbol, thousands separators, stray spaces.
+        $candidate = str_replace([',', ' ', "\u{00A0}"], '', ltrim($trimmed, '$'));
+
+        if (!is_numeric($candidate)) {
+            throw Mage::exception(
+                'Mage_Core',
+                $this->__('"%s" is not a number. Leave the box empty to clear this value.', $trimmed),
+            );
+        }
+
+        // A zero special price makes the product free. Nobody means that from a
+        // grid cell; they mean "remove the discount", which is an empty box.
+        if ((float) $candidate === 0.0 && str_contains($attribute->getAttributeCode(), 'price')) {
+            throw Mage::exception(
+                'Mage_Core',
+                $this->__('A price of 0 would make this product free. Leave the box empty to clear it instead.'),
+            );
+        }
+
+        return $candidate;
     }
 
     private function _requirePost(): bool
