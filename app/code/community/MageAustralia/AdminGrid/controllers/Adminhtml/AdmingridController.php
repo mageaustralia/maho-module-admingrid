@@ -28,7 +28,10 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
     #[\Override]
     public function preDispatch(): static
     {
-        $this->_setForcedFormKeyActions(self::FORCED_FORM_KEY_ACTIONS);
+        // Removed in Maho 26.9, where core key-checks every admin request itself
+        if (method_exists($this, '_setForcedFormKeyActions')) {
+            $this->_setForcedFormKeyActions(self::FORCED_FORM_KEY_ACTIONS);
+        }
         return parent::preDispatch();
     }
 
