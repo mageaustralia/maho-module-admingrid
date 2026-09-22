@@ -43,7 +43,7 @@ if (!$connection->isTableExists($gridTable)) {
         )
         ->addColumn(
             'created_at',
-            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_DATETIME,
             null,
             [
                 'nullable' => false,
@@ -117,7 +117,7 @@ if (!$connection->isTableExists($profileTable)) {
         )
         ->addColumn(
             'created_at',
-            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_DATETIME,
             null,
             [
                 'nullable' => false,
@@ -127,7 +127,7 @@ if (!$connection->isTableExists($profileTable)) {
         )
         ->addColumn(
             'updated_at',
-            \Maho\Db\Ddl\Table::TYPE_TIMESTAMP,
+            \Maho\Db\Ddl\Table::TYPE_DATETIME,
             null,
             [
                 'nullable' => false,
