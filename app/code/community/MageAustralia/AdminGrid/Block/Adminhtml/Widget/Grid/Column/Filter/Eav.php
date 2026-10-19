@@ -10,6 +10,44 @@ declare(strict_types=1);
 class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav extends Mage_Adminhtml_Block_Widget_Grid_Column_Filter_Select
 {
     /**
+     * "Has any value" / "Has no value" - presence rather than a specific option.
+     *
+     * Sentinels rather than real option ids, so they can never collide with an
+     * attribute's own options (those are numeric). They live in the FILTER's option
+     * list only, not the column's: the column's options also drive the cell renderer,
+     * and a row can never hold one of these as data.
+     */
+    public const FILTER_HAS_ANY = 'has_any';
+    public const FILTER_HAS_NONE = 'has_none';
+
+    /**
+     * The parent's list (blank first, then the attribute's options) with the two
+     * presence choices directly under the blank, where they are found without
+     * scrolling a long list such as Custom Stock Status.
+     *
+     * @return array<int, array{value: mixed, label: string}>
+     */
+    #[\Override]
+    protected function _getOptions()
+    {
+        $options = parent::_getOptions();
+        if ($options === []) {
+            return $options;
+        }
+
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $presence = [
+            ['value' => self::FILTER_HAS_ANY, 'label' => $helper->__('Has any value')],
+            ['value' => self::FILTER_HAS_NONE, 'label' => $helper->__('Has no value')],
+        ];
+
+        // Index 0 is the blank "no filter" entry the parent prepends.
+        array_splice($options, 1, 0, $presence);
+
+        return $options;
+    }
+
+    /**
      * Render a plain text input unless the attribute genuinely has options.
      *
      * The parent is the Select filter, so every EAV column inherited a <select>.
@@ -70,7 +108,16 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav exte
         $conn = $collection->getConnection();
 
         $backendType = $attribute->getBackendType();
-        if (in_array($backendType, ['int', 'decimal']) || $attribute->usesSource()) {
+        $isPresence = in_array($value, [self::FILTER_HAS_ANY, self::FILTER_HAS_NONE], true);
+        if ($isPresence) {
+            // An attribute with nothing set usually has no row at all, but a cleared
+            // one can leave a NULL behind, and a text one an empty string. Neither
+            // counts as "has a value". The empty-string test is only meaningful (and
+            // only valid) on character columns.
+            $valueCond = in_array($backendType, ['varchar', 'text'], true)
+                ? "(_eav.value IS NOT NULL AND _eav.value <> '')"
+                : '_eav.value IS NOT NULL';
+        } elseif (in_array($backendType, ['int', 'decimal']) || $attribute->usesSource()) {
             $valueCond = '_eav.value = ' . $conn->quote($value);
         } else {
             $valueCond = '_eav.value LIKE ' . $conn->quote('%' . $value . '%');
@@ -86,7 +133,9 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav exte
             . $storeClause
             . (' AND ' . $valueCond);
 
-        $collection->getSelect()->where(sprintf('EXISTS (%s)', $subquery));
+        // "Has no value" is the same test negated: no row for this product carrying one.
+        $exists = $value === self::FILTER_HAS_NONE ? 'NOT EXISTS' : 'EXISTS';
+        $collection->getSelect()->where(sprintf('%s (%s)', $exists, $subquery));
 
         // Return null so the grid doesn't also call addFieldToFilter
         return null;

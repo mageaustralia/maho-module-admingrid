@@ -93,6 +93,14 @@ class MageAustralia_AdminGrid_Model_Observer
     }
 
     /**
+     * Entity types whose grids load an EAV collection, so setOrder() with a plain
+     * attribute code is valid. Anything else keeps the column unsortable: ordering a
+     * flat-table collection by a column it does not have fails the whole grid, which
+     * is a worse outcome than a heading that does not click.
+     */
+    private const EAV_SORTABLE_ENTITIES = ['catalog_product', 'catalog_category', 'customer'];
+
+    /**
      * Add custom columns defined in the database to the grid.
      * Does NOT add JOINs — EAV values are hydrated post-load.
      *
@@ -147,9 +155,14 @@ class MageAustralia_AdminGrid_Model_Observer
 
             if ($sourceType === 'eav_attribute') {
                 // EAV: custom filter class, post-load hydration
-                // Note: correlated subquery sorting disabled — EAV collections can't handle
-                // Expr objects in setOrder() (crashes in _getMappedField).
-                // Sorting by EAV columns requires a future approach (e.g. temp table).
+                // Sorting: NOT by a correlated subquery - EAV collections reject Expr
+                // objects in setOrder() (crashes in _getMappedField). It does not need
+                // one. Core orders by filter_index ?: index, and an EAV collection's
+                // setOrder() accepts a plain attribute code and joins the value table
+                // itself. The EAV filter below ignores filter_index entirely (it applies
+                // its own EXISTS), so the column can carry the attribute code for the
+                // sort without affecting filtering or the post-load hydration, which
+                // both key on the column code.
                 $isEav = true;
                 $sortable = false;
                 $filterClass = 'mageaustralia_admingrid/adminhtml_widget_grid_column_filter_eav';
@@ -160,6 +173,10 @@ class MageAustralia_AdminGrid_Model_Observer
                 $entityType = $sourceConfig['entity_type'] ?? 'catalog_product';
                 if ($attrCode) {
                     $attr = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
+                    if ($attr && $attr->getId() && in_array($entityType, self::EAV_SORTABLE_ENTITIES, true)) {
+                        $sortable = true;
+                        $filterIndex = $attrCode;
+                    }
                     if ($attr && $attr->getId() && $attr->usesSource()) {
                         $columnType = 'options';
                         $options = $this->getAttributeOptions($attr);
@@ -1142,7 +1159,7 @@ class MageAustralia_AdminGrid_Model_Observer
         }
 
         $field = $column->getFilterIndex() ?: $column->getIndex();
-        if (strpos($field, '.') === false) {
+        if (!str_contains($field, '.')) {
             $field = 'main_table.' . $field;
         }
 
