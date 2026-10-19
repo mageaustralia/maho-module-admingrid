@@ -5,6 +5,39 @@ declare(strict_types=1);
 class MageAustralia_AdminGrid_Model_Observer
 {
     /**
+     * Daily cron: refresh the auto-archived option list for every EAV select column, so
+     * options no product uses any more drop into the filter's "Archived" group (and come
+     * back out if a product starts using them again).
+     */
+    public function autoArchiveUnusedOptions(): void
+    {
+        if (!Mage::getStoreConfigFlag('mageaustralia_admingrid/general/auto_archive_unused')) {
+            return;
+        }
+
+        $helper = Mage::helper('mageaustralia_admingrid');
+        $seen = [];
+        foreach (Mage::getResourceModel('mageaustralia_admingrid/column_collection')->addFieldToFilter('source_type', 'eav_attribute') as $column) {
+            /** @var MageAustralia_AdminGrid_Model_Column $column */
+            $config = $column->getSourceConfig();
+            $attrCode = (string) ($config['attribute_code'] ?? '');
+            $entityType = (string) ($config['entity_type'] ?? 'catalog_product');
+            if ($attrCode === '' || isset($seen[$entityType . $attrCode])) {
+                continue;
+            }
+
+            $seen[$entityType . $attrCode] = true;
+            try {
+                $helper->setAutoArchivedOptionIds($entityType, $attrCode, $helper->findUnusedOptionIds($entityType, $attrCode));
+            } catch (\Throwable $exception) {
+                Mage::logException($exception);
+            }
+        }
+
+        Mage::getConfig()->reinit();
+    }
+
+    /**
      * Per-request cache of EAV attribute options keyed by attribute_id.
      * Avoids repeated getAllOptions() calls when grids render multiple times (e.g. ShipEasy).
      *

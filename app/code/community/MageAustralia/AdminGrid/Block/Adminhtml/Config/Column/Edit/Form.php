@@ -91,6 +91,17 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
             'style' => 'font-family:monospace; height:80px;',
         ]);
 
+        // Archived options: only meaningful for an existing EAV column whose attribute has
+        // options. Stored per attribute (shared by every column showing it), not per column.
+        $archivedField = $this->getArchivedOptionsField($column);
+        if ($archivedField !== null) {
+            $fieldset->addField('archived_options_submitted', 'hidden', [
+                'name'  => 'archived_options_submitted',
+                'value' => '1',
+            ]);
+            $fieldset->addField('archived_options', 'multiselect', $archivedField);
+        }
+
         $fieldset->addField('sort_order', 'text', [
             'name'  => 'sort_order',
             'label' => $this->__('Sort Order'),
@@ -123,6 +134,9 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
             if ($column->getData('source_type') === 'eav_attribute') {
                 $sourceConfig = $column->getSourceConfig();
                 $data['eav_attribute_code'] = $sourceConfig['attribute_code'] ?? '';
+                if ($archivedField !== null) {
+                    $data['archived_options'] = $archivedField['value'];
+                }
             }
 
             $form->setValues($data);
@@ -132,6 +146,50 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Config_Column_Edit_Form extends Ma
         $this->setForm($form);
 
         return parent::_prepareForm();
+    }
+
+    /**
+     * Multiselect config for the archived options of this column's attribute, or null when
+     * the column is new, not an EAV column, or the attribute has no option list.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function getArchivedOptionsField(?MageAustralia_AdminGrid_Model_Column $column): ?array
+    {
+        if (!$column || !$column->getId() || $column->getData('source_type') !== 'eav_attribute') {
+            return null;
+        }
+
+        $sourceConfig = $column->getSourceConfig();
+        $attrCode = (string) ($sourceConfig['attribute_code'] ?? '');
+        $entityType = (string) ($sourceConfig['entity_type'] ?? 'catalog_product');
+        if ($attrCode === '') {
+            return null;
+        }
+
+        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
+        if (!$attribute || !$attribute->getId() || !$attribute->usesSource()) {
+            return null;
+        }
+
+        $values = [];
+        /** @phpstan-ignore arguments.count */
+        foreach ($attribute->getSource()->getAllOptions(false) as $option) {
+            $values[] = ['value' => $option['value'], 'label' => $option['label']];
+        }
+
+        if ($values === []) {
+            return null;
+        }
+
+        return [
+            'name'   => 'archived_options[]',
+            'label'  => $this->__('Archived Options'),
+            'values' => $values,
+            'value'  => Mage::helper('mageaustralia_admingrid')->getArchivedOptionIds($entityType, $attrCode),
+            'note'   => $this->__('Hidden from the main filter list and shown under "Archived" instead. Existing data is unaffected. Applies to every grid showing this attribute.'),
+            'style'  => 'height:200px;',
+        ];
     }
 
     /**

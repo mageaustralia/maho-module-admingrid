@@ -192,6 +192,7 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
 
         try {
             $column->save();
+            $this->saveArchivedOptions($column, $data);
             $this->_getSession()->addSuccess($this->__('Column saved.'));
             $this->_redirect('*/*/columns', ['grid_id' => $gridId]);
         } catch (Exception $exception) {
@@ -199,6 +200,37 @@ class MageAustralia_AdminGrid_Adminhtml_AdmingridController extends Mage_Adminht
             $this->_getSession()->addError($this->__('Failed to save: %s', $exception->getMessage()));
             $this->_redirectReferer();
         }
+    }
+
+    /**
+     * Persist the Archived Options multiselect for an EAV column's attribute. Only ids that
+     * are real options of the attribute are kept.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function saveArchivedOptions(MageAustralia_AdminGrid_Model_Column $column, array $data): void
+    {
+        if (empty($data['archived_options_submitted']) || $column->getData('source_type') !== 'eav_attribute') {
+            return;
+        }
+
+        $sourceConfig = $column->getSourceConfig();
+        $attrCode = (string) ($sourceConfig['attribute_code'] ?? '');
+        $entityType = (string) ($sourceConfig['entity_type'] ?? 'catalog_product');
+        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attrCode);
+        if ($attrCode === '' || !$attribute || !$attribute->getId() || !$attribute->usesSource()) {
+            return;
+        }
+
+        $valid = [];
+        /** @phpstan-ignore arguments.count */
+        foreach ($attribute->getSource()->getAllOptions(false) as $option) {
+            $valid[] = (int) $option['value'];
+        }
+
+        $posted = is_array($data['archived_options'] ?? null) ? $data['archived_options'] : [];
+        $ids = array_values(array_intersect(array_map('intval', $posted), $valid));
+        Mage::helper('mageaustralia_admingrid')->setArchivedOptionIds($entityType, $attrCode, $ids);
     }
 
     /**

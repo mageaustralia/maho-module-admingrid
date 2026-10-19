@@ -577,6 +577,135 @@ class MageAustralia_AdminGrid_Helper_Data extends Mage_Core_Helper_Abstract
         return null;
     }
 
+    // ── Archived attribute options ───────────────────────────────────────
+
+    private const ARCHIVED_OPTIONS_PATH = 'mageaustralia_admingrid/archived_options/';
+    private const AUTO_ARCHIVED_PATH = 'mageaustralia_admingrid/auto_archived/';
+
+    private function archivedOptionsPath(string $entityType, string $attributeCode): string
+    {
+        return self::ARCHIVED_OPTIONS_PATH . $entityType . '__' . $attributeCode;
+    }
+
+    /**
+     * Option ids an admin has archived for an attribute. Shared by every grid column
+     * that shows the attribute, so archiving a brand once hides it everywhere.
+     * Archived options stay selectable in filters (listed separately) and keep
+     * rendering in cells; they are only moved out of the main list.
+     *
+     * @return list<int>
+     */
+    public function getArchivedOptionIds(string $entityType, string $attributeCode): array
+    {
+        return $this->parseIdList((string) Mage::getStoreConfig($this->archivedOptionsPath($entityType, $attributeCode)));
+    }
+
+    /**
+     * Option ids archived automatically by the daily job: options of a select attribute that
+     * no product carries any more (e.g. a brand that has dropped out of the catalogue).
+     * Kept apart from the hand-picked list so a brand that comes back into use leaves the
+     * archive again on the next run, while hand-picked ones stay archived.
+     *
+     * @return list<int>
+     */
+    public function getAutoArchivedOptionIds(string $entityType, string $attributeCode): array
+    {
+        if (!Mage::getStoreConfigFlag('mageaustralia_admingrid/general/auto_archive_unused')) {
+            return [];
+        }
+
+        return $this->parseIdList((string) Mage::getStoreConfig(self::AUTO_ARCHIVED_PATH . $entityType . '__' . $attributeCode));
+    }
+
+    /**
+     * Option ids of an admin-managed select attribute that no product carries. Single-value
+     * (integer) attributes only: a multiselect stores comma-joined text, which cannot be checked.
+     *
+     * @return list<int>
+     */
+    public function findUnusedOptionIds(string $entityType, string $attributeCode): array
+    {
+        $attribute = Mage::getSingleton('eav/config')->getAttribute($entityType, $attributeCode);
+        if (!$attribute || !$attribute->getId() || !$attribute->usesSource() || $attribute->getBackendType() !== 'int') {
+            return [];
+        }
+
+        // Only options an admin manages (brands, custom lists). Fixed lists such as visibility
+        // or status come from code and have unused values by design.
+        if (!$attribute->getSource() instanceof Mage_Eav_Model_Entity_Attribute_Source_Table) {
+            return [];
+        }
+
+        $conn = Mage::getSingleton('core/resource')->getConnection('core_read');
+        $select = $conn->select()
+            ->distinct()
+            ->from($attribute->getBackendTable(), ['value'])
+            ->where('attribute_id = ?', (int) $attribute->getId())
+            ->where('value IS NOT NULL');
+        $used = array_map('intval', $conn->fetchCol($select));
+
+        $unused = [];
+        /** @phpstan-ignore arguments.count */
+        foreach ($attribute->getSource()->getAllOptions(false) as $option) {
+            $id = (int) $option['value'];
+            if ($id > 0 && !in_array($id, $used, true)) {
+                $unused[] = $id;
+            }
+        }
+
+        return $unused;
+    }
+
+    /**
+     * @param list<int> $optionIds
+     */
+    public function setAutoArchivedOptionIds(string $entityType, string $attributeCode, array $optionIds): void
+    {
+        $path = self::AUTO_ARCHIVED_PATH . $entityType . '__' . $attributeCode;
+        $ids = array_values(array_unique($optionIds));
+        sort($ids);
+        $value = implode(',', $ids);
+        if ($value === (string) Mage::getStoreConfig($path)) {
+            return;
+        }
+
+        if ($ids === []) {
+            Mage::getConfig()->deleteConfig($path);
+        } else {
+            Mage::getConfig()->saveConfig($path, $value);
+        }
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function parseIdList(string $raw): array
+    {
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', array_filter(explode(',', $raw), 'is_numeric'))));
+    }
+
+    /**
+     * @param list<int|string> $optionIds
+     */
+    public function setArchivedOptionIds(string $entityType, string $attributeCode, array $optionIds): void
+    {
+        $ids = array_values(array_unique(array_map('intval', array_filter($optionIds, 'is_numeric'))));
+        sort($ids);
+
+        $path = $this->archivedOptionsPath($entityType, $attributeCode);
+        if ($ids === []) {
+            Mage::getConfig()->deleteConfig($path);
+        } else {
+            Mage::getConfig()->saveConfig($path, implode(',', $ids));
+        }
+
+        Mage::getConfig()->reinit();
+    }
+
     // ── Inline cell editing ──────────────────────────────────────────────
 
     /**

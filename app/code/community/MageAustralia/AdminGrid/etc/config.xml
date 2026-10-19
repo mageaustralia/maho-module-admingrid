@@ -120,10 +120,23 @@
             </modules>
         </translate>
     </adminhtml>
+    <crontab>
+        <jobs>
+            <mageaustralia_admingrid_auto_archive>
+                <schedule>
+                    <cron_expr>30 3 * * *</cron_expr>
+                </schedule>
+                <run>
+                    <model>mageaustralia_admingrid/observer::autoArchiveUnusedOptions</model>
+                </run>
+            </mageaustralia_admingrid_auto_archive>
+        </jobs>
+    </crontab>
     <default>
         <mageaustralia_admingrid>
             <general>
                 <enabled>1</enabled>
+                <auto_archive_unused>1</auto_archive_unused>
             </general>
         </mageaustralia_admingrid>
     </default>

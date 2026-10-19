@@ -44,7 +44,49 @@ class MageAustralia_AdminGrid_Block_Adminhtml_Widget_Grid_Column_Filter_Eav exte
         // Index 0 is the blank "no filter" entry the parent prepends.
         array_splice($options, 1, 0, $presence);
 
-        return $options;
+        return $this->splitArchivedOptions($options, $helper);
+    }
+
+    /**
+     * Move archived options out of the main list into a trailing "Archived" group, so a
+     * filter on a brand that is no longer stocked is still possible but never looks current.
+     * Archived = ticked by an admin, or archived by the daily job because no product uses it.
+     *
+     * @param array<int, array{value: mixed, label: string}> $options
+     * @return array<int, array{value: mixed, label: string}>
+     */
+    private function splitArchivedOptions(array $options, MageAustralia_AdminGrid_Helper_Data $helper): array
+    {
+        $sourceConfig = $this->getColumn()->getData('admingrid_source_config');
+        $attrCode = is_array($sourceConfig) ? ($sourceConfig['attribute_code'] ?? null) : null;
+        if (!$attrCode) {
+            return $options;
+        }
+
+        $entityType = (string) ($sourceConfig['entity_type'] ?? 'catalog_product');
+        $archivedIds = array_values(array_unique(array_merge(
+            $helper->getArchivedOptionIds($entityType, (string) $attrCode),
+            $helper->getAutoArchivedOptionIds($entityType, (string) $attrCode),
+        )));
+        if ($archivedIds === []) {
+            return $options;
+        }
+
+        $current = [];
+        $archived = [];
+        foreach ($options as $option) {
+            if (is_numeric($option['value']) && in_array((int) $option['value'], $archivedIds, true)) {
+                $archived[] = $option;
+            } else {
+                $current[] = $option;
+            }
+        }
+
+        if ($archived !== []) {
+            $current[] = ['value' => $archived, 'label' => $helper->__('Archived')];
+        }
+
+        return $current;
     }
 
     /**
