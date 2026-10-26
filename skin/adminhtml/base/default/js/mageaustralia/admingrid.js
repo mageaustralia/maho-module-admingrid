@@ -299,12 +299,12 @@
             dd.appendChild(gridColsContainer);
             this._buildGridColumnRows(gridColsContainer);
 
-            // Section: Available attributes (loaded async)
+            // Section: Available attributes (fetched on first open of the dropdown,
+            // not on page load — avoids a request burst from every grid on the page)
             const availSection = document.createElement('div');
             availSection.id = `admingrid-avail-${this.gridBlockId}`;
             availSection.className = 'admingrid-avail-section';
             dd.appendChild(availSection);
-            this.loadAvailableColumns(availSection);
 
             // Search/filter input
             const searchWrap = document.createElement('div');
@@ -324,7 +324,13 @@
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
-                if (dd.style.display === 'block') searchInput.focus();
+                if (dd.style.display === 'block') {
+                    searchInput.focus();
+                    if (!this._availLoaded) {
+                        this._availLoaded = true;
+                        this.loadAvailableColumns(availSection);
+                    }
+                }
             });
 
             document.addEventListener('click', (e) => {
@@ -874,6 +880,7 @@
                     attributes.forEach(col => this._addAvailableRow(container, col));
                 }
             } catch (e) {
+                this._availLoaded = false; // allow retry on next open
                 console.warn('AdminGrid: failed to load available columns', e);
             }
         }
@@ -1193,12 +1200,16 @@
         async fetchEditableEligible() {
             const codes = this.columns.map(c => c.code).filter(c => c && c !== 'massaction');
             if (codes.length === 0) { this.editableEligible = new Set(); return; }
+            // Same column set as the last successful fetch — eligibility can't have changed
+            const key = codes.join(',');
+            if (key === this._eligibleKey) return;
             try {
                 const url = this.getConfigUrl('editableEligible')
                     + `?grid_block_id=${encodeURIComponent(this.gridBlockId)}`
                     + `&codes=${encodeURIComponent(codes.join(','))}`;
                 const data = await mahoFetch(url, { loaderArea: false });
                 this.editableEligible = new Set(data.codes || []);
+                this._eligibleKey = key;
             } catch (e) {
                 console.warn('AdminGrid: eligibility load failed', e);
             }
